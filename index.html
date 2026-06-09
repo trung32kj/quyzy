@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Quiz PWA — Trắc nghiệm offline</title>
+  <meta name="theme-color" content="#1a73e8" />
+  <meta name="description" content="Trắc nghiệm từ Excel, chạy offline, lưu tiến độ + lịch sử." />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon.png" />
+  <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.png" />
+  <!-- Tránh "flash" sai theme: set ngay từ trước khi parse body -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("theme");
+        if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="./css/app.css" />
+  <!-- Vendor libs (offline, từ vendor/) -->
+  <script src="./vendor/xlsx.full.min.js"></script>
+  <script src="./vendor/idb-keyval.umd.js"></script>
+</head>
+<body>
+  <main class="container">
+    <header class="topbar">
+      <h1>
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M9 11l3 3L22 4"/>
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+        </svg>
+        Quiz PWA
+      </h1>
+      <div class="topbar-actions">
+        <button id="themeBtn" class="ghost icon-only" aria-label="Đổi giao diện sáng/tối" title="Đổi giao diện">
+          <svg id="iconSun" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          <svg id="iconMoon" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="learn">📚 Học</button>
+      <button class="tab-btn" data-tab="exam">📝 Thi</button>
+      <button class="tab-btn" data-tab="review">❌ Xem lại câu sai</button>
+    </nav>
+
+    <!-- Tab Content: Học -->
+    <div id="tab-learn" class="tab-content active">
+      <div id="resumeBanner" class="banner" style="display:none;">
+        <span id="resumeText"></span>
+        <button id="resumeBtn">Tiếp tục</button>
+        <button id="discardBtn" class="ghost">Bỏ</button>
+      </div>
+
+      <section class="card">
+        <div class="row">
+          <label for="upload" style="font-weight:600;">📂 Chọn file Excel:</label>
+          <input type="file" id="upload" accept=".xlsx,.xls" />
+        </div>
+
+        <div id="sheetSelector" class="row">
+          <label for="sheetSelect">Sheet:</label>
+          <select id="sheetSelect"></select>
+          <button id="loadSheetBtn">Tải dữ liệu</button>
+        </div>
+
+        <div id="settings" class="row">
+          <label for="numPerRound">Số câu mỗi vòng:</label>
+          <select id="numPerRound">
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="15">15</option>
+            <option value="20" selected>20</option>
+            <option value="25">25</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+          </select>
+          <button id="startBtn">Bắt đầu</button>
+        </div>
+
+        <div id="status"></div>
+      </section>
+
+      <div id="quizArea" style="display:none;">
+        <div id="roundInfo"></div>
+        <div id="progress"></div>
+        <div id="quiz"></div>
+        <div class="actions">
+          <button id="submitBtn" style="display:none;">Nộp bài</button>
+          <button id="nextBtn" style="display:none;" class="ghost">Vòng tiếp theo</button>
+        </div>
+        <div id="result"></div>
+      </div>
+    </div>
+
+    <!-- Tab Content: Thi -->
+    <div id="tab-exam" class="tab-content">
+      <section class="card">
+        <div class="row">
+          <label for="examUpload" style="font-weight:600;">📂 Chọn file Excel:</label>
+          <input type="file" id="examUpload" accept=".xlsx,.xls" />
+        </div>
+
+        <div id="examSheetSelector" class="row">
+          <label for="examSheetSelect">Sheet:</label>
+          <select id="examSheetSelect"></select>
+          <button id="examLoadSheetBtn">Tải dữ liệu</button>
+        </div>
+
+        <div id="examSettings" class="row">
+          <label for="examNumPerRound">Số câu mỗi vòng:</label>
+          <select id="examNumPerRound">
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="15">15</option>
+            <option value="20" selected>20</option>
+            <option value="25">25</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+          </select>
+        </div>
+
+        <div id="examTimerSettings" class="row">
+          <label for="examTimer">Thời gian (phút):</label>
+          <select id="examTimer">
+            <option value="15">15 phút</option>
+            <option value="30" selected>30 phút</option>
+            <option value="45">45 phút</option>
+            <option value="60">60 phút</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <button id="examStartBtn">🚀 Bắt đầu thi</button>
+        </div>
+
+        <div id="examStatus"></div>
+      </section>
+
+      <div id="examArea" style="display:none;">
+        <div id="examTimerDisplay" class="timer-display"></div>
+        <div id="examRoundInfo"></div>
+        <div id="examProgress"></div>
+        <div id="examQuiz"></div>
+        <div class="actions">
+          <button id="examSubmitBtn">📤 Nộp bài</button>
+        </div>
+        <div id="examResult"></div>
+      </div>
+    </div>
+
+    <!-- Tab Content: Xem lại câu sai -->
+    <div id="tab-review" class="tab-content">
+      <section class="card">
+        <h2>❌ Câu sai</h2>
+        <div id="reviewStatus"></div>
+        <div id="reviewList"></div>
+        <div class="actions">
+          <button id="reviewPracticeBtn" style="display:none;">🔄 Ôn tập lại</button>
+          <button id="reviewClearBtn" class="ghost" style="display:none;">🗑️ Xóa danh sách</button>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
