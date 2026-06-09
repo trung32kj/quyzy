@@ -35,7 +35,7 @@ export async function clearCurrentSession(key = "current") {
  *   correct: number,
  *   total: number,
  *   unanswered: number,
- *   wrongQuestions: { id:number, question:string, picked:string|null, correct:string }[],
+ *   wrongQuestions: { id:number, question:string, options:string[], correctIndex:number, picked:number|null }[],
  * }} attempt
  */
 export async function saveAttempt(attempt) {
@@ -53,4 +53,31 @@ export async function getAllAttempts() {
 export async function clearAttempts() {
   ensure();
   return idbKeyval.del("attempts", STORE);
+}
+
+// ===== Wrong Questions (cho tab Ôn tập) =====
+/**
+ * Lưu danh sách câu sai, deduplicate theo id+question.
+ * Mỗi câu lưu đủ thông tin để ôn tập: options, correctIndex.
+ * @param {{ id:number, question:string, options:string[], correctIndex:number, picked:number|null }[]} newItems
+ */
+export async function saveWrongQuestions(newItems) {
+  ensure();
+  const existing = (await idbKeyval.get("wrongQuestions", STORE)) || [];
+  // Deduplicate: dùng question text làm key
+  const map = new Map(existing.map((q) => [q.question, q]));
+  for (const item of newItems) {
+    map.set(item.question, item);
+  }
+  return idbKeyval.set("wrongQuestions", [...map.values()], STORE);
+}
+
+export async function getWrongQuestions() {
+  ensure();
+  return (await idbKeyval.get("wrongQuestions", STORE)) || [];
+}
+
+export async function clearWrongQuestions() {
+  ensure();
+  return idbKeyval.del("wrongQuestions", STORE);
 }
