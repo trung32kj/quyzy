@@ -148,14 +148,25 @@
         </section>
 
         <div id="quizArea" style="display:none;">
-          <div id="roundInfo"></div>
-          <div id="progress"></div>
-          <div id="quiz"></div>
-          <div class="actions">
-            <button id="submitBtn" style="display:none;">Nộp bài</button>
-            <button id="nextBtn" style="display:none;" class="ghost">Vòng tiếp theo</button>
+          <div class="quiz-layout">
+            <!-- Cột trái: câu hỏi -->
+            <div class="quiz-main">
+              <div id="roundInfo"></div>
+              <div id="quiz"></div>
+              <div class="actions">
+                <button id="submitBtn" style="display:none;">Nộp bài</button>
+                <button id="nextBtn" style="display:none;" class="ghost">Vòng tiếp theo</button>
+              </div>
+              <div id="result"></div>
+            </div>
+            <!-- Cột phải: progress ghim -->
+            <div class="quiz-sidebar">
+              <div class="sidebar-sticky">
+                <div class="sidebar-title">📋 Tiến độ</div>
+                <div id="progress"></div>
+              </div>
+            </div>
           </div>
-          <div id="result"></div>
         </div>
       </div>
 
