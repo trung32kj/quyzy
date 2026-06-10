@@ -164,6 +164,16 @@ window.addEventListener("scroll", () => {
   document.querySelector(".topbar")?.classList.toggle("scrolled", window.scrollY > 4);
 }, { passive: true });
 
+// Đo và cập nhật chiều cao topbar để sidebar sticky dừng đúng chỗ
+function updateTopbarHeight() {
+  const tb = document.querySelector(".topbar");
+  if (tb) {
+    document.documentElement.style.setProperty("--topbar-h", tb.offsetHeight + "px");
+  }
+}
+updateTopbarHeight();
+window.addEventListener("resize", updateTopbarHeight, { passive: true });
+
 // ================================================================
 //  RESUME PHIÊN DỞ
 // ================================================================

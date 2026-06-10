@@ -1051,18 +1051,17 @@ a.ghost.btn-sm:hover {
 .quiz-sidebar {
   width: 180px;
   flex-shrink: 0;
-  align-self: flex-start;
 }
 
 .sidebar-sticky {
   position: sticky;
-  top: 120px;
+  top: calc(var(--topbar-h, 56px) + 12px);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: var(--space-3);
   box-shadow: var(--shadow-sm);
-  max-height: calc(100vh - 140px);
+  max-height: calc(100vh - var(--topbar-h, 56px) - 24px);
   overflow-y: auto;
 }
 
