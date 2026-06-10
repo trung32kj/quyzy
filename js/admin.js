@@ -2,7 +2,7 @@
 import { readWorkbook, parseSheet } from "./parser.js";
 import {
     auth, onAuthChange, logout, isAdmin,
-    uploadDocument,
+    uploadDocument, resetPasswordEmail,
     adminGetAllDocuments, adminDeleteDocument, adminUpdateDocumentTitle,
     adminGetAllUsers, adminSetRole,
 } from "./firebase.js";
@@ -266,6 +266,7 @@ async function loadUsers() {
               <td>${(u.wrongQuestions || []).length}</td>
               <td>${(u.attempts || []).length}</td>
               <td>
+                <button class="ghost btn-sm" onclick="sendReset('${escapeHtml(u.email)}')">📧 Reset MK</button>
                 <button class="ghost btn-sm danger" onclick="clearUserData('${u.uid}', '${escapeHtml(u.displayName || u.email)}')">🗑️ Xóa data</button>
               </td>
             </tr>`
@@ -282,6 +283,17 @@ window.changeRole = async function (uid, role) {
     try {
         await adminSetRole(uid, role);
     } catch (err) { alert("Lỗi đổi role: " + err.message); }
+};
+
+window.sendReset = async function (email) {
+    if (!email) { showToast("❌ User này không có email."); return; }
+    if (!confirm(`Gửi email reset mật khẩu đến:\n${email}?`)) return;
+    try {
+        await resetPasswordEmail(email);
+        showToast(`✅ Đã gửi email reset đến ${email}`);
+    } catch (err) {
+        showToast("❌ Lỗi: " + err.message);
+    }
 };
 
 window.clearUserData = async function (uid, name) {

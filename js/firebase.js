@@ -4,6 +4,7 @@ import {
     getAuth, onAuthStateChanged,
     createUserWithEmailAndPassword, signInWithEmailAndPassword,
     signInWithPopup, GoogleAuthProvider, signOut, updateProfile,
+    sendPasswordResetEmail,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
     getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
@@ -49,6 +50,7 @@ export async function loginWithGoogle() {
 
 export function logout() { return signOut(auth); }
 export function onAuthChange(cb) { return onAuthStateChanged(auth, cb); }
+export function resetPasswordEmail(email) { return sendPasswordResetEmail(auth, email); }
 
 // ================================================================
 //  USER DOC  (users/{uid})
