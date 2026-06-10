@@ -64,168 +64,186 @@
       </div>
     </header>
 
-    <!-- Tabs -->
-    <nav class="tabs">
-      <button class="tab-btn active" data-tab="learn">📚 Học</button>
-      <button class="tab-btn" data-tab="exam">📝 Thi</button>
-      <button class="tab-btn" data-tab="review">❌ Câu sai</button>
-      <button class="tab-btn" data-tab="history">📊 Lịch sử</button>
-    </nav>
+    <!-- Màn hình yêu cầu đăng nhập -->
+    <div id="loginWall"
+      style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding: 60px 20px; text-align:center; gap:16px;">
+      <svg style="width:64px;height:64px;color:var(--primary);opacity:0.7;" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </svg>
+      <h2 style="margin:0;font-size:1.3rem;">Vui lòng đăng nhập</h2>
+      <p style="margin:0;color:var(--text-muted);max-width:320px;">Đăng nhập để học bài, lưu tiến độ và đồng bộ dữ liệu
+        trên mọi thiết bị.</p>
+      <button id="loginWallBtn" style="margin-top:8px;padding:12px 32px;font-size:1rem;">👤 Đăng nhập / Đăng ký</button>
+    </div>
 
-    <!-- ===== TAB HỌC ===== -->
-    <div id="tab-learn" class="tab-content active">
-      <div id="resumeBanner" class="banner" style="display:none;">
-        <span id="resumeText"></span>
-        <button id="resumeBtn">Tiếp tục</button>
-        <button id="discardBtn" class="ghost">Bỏ</button>
+    <!-- Nội dung chính (chỉ hiện khi đã đăng nhập) -->
+    <div id="appContent" style="display:none;">
+
+      <!-- Tabs -->
+      <nav class="tabs">
+        <button class="tab-btn active" data-tab="learn">📚 Học</button>
+        <button class="tab-btn" data-tab="exam">📝 Thi</button>
+        <button class="tab-btn" data-tab="review">❌ Câu sai</button>
+        <button class="tab-btn" data-tab="history">📊 Lịch sử</button>
+      </nav>
+
+      <!-- ===== TAB HỌC ===== -->
+      <div id="tab-learn" class="tab-content active">
+        <div id="resumeBanner" class="banner" style="display:none;">
+          <span id="resumeText"></span>
+          <button id="resumeBtn">Tiếp tục</button>
+          <button id="discardBtn" class="ghost">Bỏ</button>
+        </div>
+
+        <!-- Nhập mã tài liệu -->
+        <section class="card">
+          <h3 style="margin:0 0 12px;font-size:1rem;">🔑 Nhập mã tài liệu</h3>
+          <div class="row">
+            <input type="text" id="docCodeInput" placeholder="Nhập mã 6 ký tự..." maxlength="6"
+              style="text-transform:uppercase;font-size:1.1rem;letter-spacing:3px;width:160px;" />
+            <button id="loadCodeBtn">Tải tài liệu</button>
+          </div>
+          <div id="codeStatus" style="color:var(--text-muted);font-size:13px;margin-top:8px;"></div>
+          <div id="codeSettings" class="row">
+            <label>Số câu mỗi vòng:</label>
+            <select id="numPerRoundCode">
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="15">15</option>
+              <option value="20" selected>20</option>
+              <option value="30">30</option>
+              <option value="50">50</option>
+            </select>
+            <button id="startFromCodeBtn">▶ Bắt đầu</button>
+          </div>
+        </section>
+
+        <!-- Upload Excel -->
+        <section class="card">
+          <h3 style="margin:0 0 12px;font-size:1rem;">📂 Hoặc tải file Excel</h3>
+          <div class="row">
+            <input type="file" id="upload" accept=".xlsx,.xls" />
+          </div>
+          <div id="sheetSelector" class="row">
+            <label for="sheetSelect">Sheet:</label>
+            <select id="sheetSelect"></select>
+            <button id="loadSheetBtn">Tải dữ liệu</button>
+          </div>
+          <div id="settings" class="row">
+            <label for="numPerRound">Số câu/vòng:</label>
+            <select id="numPerRound">
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="15">15</option>
+              <option value="20" selected>20</option>
+              <option value="25">25</option>
+              <option value="30">30</option>
+              <option value="50">50</option>
+            </select>
+            <button id="startBtn">Bắt đầu</button>
+          </div>
+          <div id="status"></div>
+        </section>
+
+        <div id="quizArea" style="display:none;">
+          <div id="roundInfo"></div>
+          <div id="progress"></div>
+          <div id="quiz"></div>
+          <div class="actions">
+            <button id="submitBtn" style="display:none;">Nộp bài</button>
+            <button id="nextBtn" style="display:none;" class="ghost">Vòng tiếp theo</button>
+          </div>
+          <div id="result"></div>
+        </div>
       </div>
 
-      <!-- Nhập mã tài liệu -->
-      <section class="card">
-        <h3 style="margin:0 0 12px;font-size:1rem;">🔑 Nhập mã tài liệu</h3>
-        <div class="row">
-          <input type="text" id="docCodeInput" placeholder="Nhập mã 6 ký tự..." maxlength="6"
-            style="text-transform:uppercase;font-size:1.1rem;letter-spacing:3px;width:160px;" />
-          <button id="loadCodeBtn">Tải tài liệu</button>
-        </div>
-        <div id="codeStatus" style="color:var(--text-muted);font-size:13px;margin-top:8px;"></div>
-        <div id="codeSettings" class="row">
-          <label>Số câu mỗi vòng:</label>
-          <select id="numPerRoundCode">
-            <option value="5">5</option>
-            <option value="10">10</option>
-            <option value="15">15</option>
-            <option value="20" selected>20</option>
-            <option value="30">30</option>
-            <option value="50">50</option>
-          </select>
-          <button id="startFromCodeBtn">▶ Bắt đầu</button>
-        </div>
-      </section>
+      <!-- ===== TAB THI ===== -->
+      <div id="tab-exam" class="tab-content">
+        <section class="card">
+          <!-- Nhập mã -->
+          <div class="row">
+            <label style="font-weight:600;">🔑 Thi từ mã tài liệu:</label>
+            <input type="text" id="examCodeInput" placeholder="Mã 6 ký tự..." maxlength="6"
+              style="text-transform:uppercase;letter-spacing:3px;width:160px;" />
+            <button id="examLoadCodeBtn">Tải</button>
+          </div>
+          <div class="row" style="align-items:center;gap:8px;">
+            <span style="color:var(--text-muted);font-size:13px;">— hoặc upload file —</span>
+          </div>
+          <div class="row">
+            <label for="examUpload" style="font-weight:600;">📂 File Excel:</label>
+            <input type="file" id="examUpload" accept=".xlsx,.xls" />
+          </div>
+          <div id="examSheetSelector" class="row">
+            <label for="examSheetSelect">Sheet:</label>
+            <select id="examSheetSelect"></select>
+            <button id="examLoadSheetBtn">Tải dữ liệu</button>
+          </div>
+          <div id="examSettings" class="row">
+            <label for="examNumPerRound">Số câu/vòng:</label>
+            <select id="examNumPerRound">
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="15">15</option>
+              <option value="20" selected>20</option>
+              <option value="25">25</option>
+              <option value="30">30</option>
+              <option value="50">50</option>
+            </select>
+          </div>
+          <div id="examTimerSettings" class="row">
+            <label for="examTimer">Thời gian:</label>
+            <select id="examTimer">
+              <option value="15">15 phút</option>
+              <option value="30" selected>30 phút</option>
+              <option value="45">45 phút</option>
+              <option value="60">60 phút</option>
+            </select>
+          </div>
+          <div id="examStartBtnRow" class="row">
+            <button id="examStartBtn">🚀 Bắt đầu thi</button>
+          </div>
+          <div id="examStatus"></div>
+        </section>
 
-      <!-- Upload Excel -->
-      <section class="card">
-        <h3 style="margin:0 0 12px;font-size:1rem;">📂 Hoặc tải file Excel</h3>
-        <div class="row">
-          <input type="file" id="upload" accept=".xlsx,.xls" />
+        <div id="examArea" style="display:none;">
+          <div id="examTimerDisplay" class="timer-display"></div>
+          <div id="examRoundInfo"></div>
+          <div id="examProgress"></div>
+          <div id="examQuiz"></div>
+          <div class="actions">
+            <button id="examSubmitBtn">📤 Nộp bài</button>
+          </div>
+          <div id="examResult"></div>
         </div>
-        <div id="sheetSelector" class="row">
-          <label for="sheetSelect">Sheet:</label>
-          <select id="sheetSelect"></select>
-          <button id="loadSheetBtn">Tải dữ liệu</button>
-        </div>
-        <div id="settings" class="row">
-          <label for="numPerRound">Số câu/vòng:</label>
-          <select id="numPerRound">
-            <option value="5">5</option>
-            <option value="10">10</option>
-            <option value="15">15</option>
-            <option value="20" selected>20</option>
-            <option value="25">25</option>
-            <option value="30">30</option>
-            <option value="50">50</option>
-          </select>
-          <button id="startBtn">Bắt đầu</button>
-        </div>
-        <div id="status"></div>
-      </section>
-
-      <div id="quizArea" style="display:none;">
-        <div id="roundInfo"></div>
-        <div id="progress"></div>
-        <div id="quiz"></div>
-        <div class="actions">
-          <button id="submitBtn" style="display:none;">Nộp bài</button>
-          <button id="nextBtn" style="display:none;" class="ghost">Vòng tiếp theo</button>
-        </div>
-        <div id="result"></div>
       </div>
-    </div>
 
-    <!-- ===== TAB THI ===== -->
-    <div id="tab-exam" class="tab-content">
-      <section class="card">
-        <!-- Nhập mã -->
-        <div class="row">
-          <label style="font-weight:600;">🔑 Thi từ mã tài liệu:</label>
-          <input type="text" id="examCodeInput" placeholder="Mã 6 ký tự..." maxlength="6"
-            style="text-transform:uppercase;letter-spacing:3px;width:160px;" />
-          <button id="examLoadCodeBtn">Tải</button>
-        </div>
-        <div class="row" style="align-items:center;gap:8px;">
-          <span style="color:var(--text-muted);font-size:13px;">— hoặc upload file —</span>
-        </div>
-        <div class="row">
-          <label for="examUpload" style="font-weight:600;">📂 File Excel:</label>
-          <input type="file" id="examUpload" accept=".xlsx,.xls" />
-        </div>
-        <div id="examSheetSelector" class="row">
-          <label for="examSheetSelect">Sheet:</label>
-          <select id="examSheetSelect"></select>
-          <button id="examLoadSheetBtn">Tải dữ liệu</button>
-        </div>
-        <div id="examSettings" class="row">
-          <label for="examNumPerRound">Số câu/vòng:</label>
-          <select id="examNumPerRound">
-            <option value="5">5</option>
-            <option value="10">10</option>
-            <option value="15">15</option>
-            <option value="20" selected>20</option>
-            <option value="25">25</option>
-            <option value="30">30</option>
-            <option value="50">50</option>
-          </select>
-        </div>
-        <div id="examTimerSettings" class="row">
-          <label for="examTimer">Thời gian:</label>
-          <select id="examTimer">
-            <option value="15">15 phút</option>
-            <option value="30" selected>30 phút</option>
-            <option value="45">45 phút</option>
-            <option value="60">60 phút</option>
-          </select>
-        </div>
-        <div id="examStartBtnRow" class="row">
-          <button id="examStartBtn">🚀 Bắt đầu thi</button>
-        </div>
-        <div id="examStatus"></div>
-      </section>
-
-      <div id="examArea" style="display:none;">
-        <div id="examTimerDisplay" class="timer-display"></div>
-        <div id="examRoundInfo"></div>
-        <div id="examProgress"></div>
-        <div id="examQuiz"></div>
-        <div class="actions">
-          <button id="examSubmitBtn">📤 Nộp bài</button>
-        </div>
-        <div id="examResult"></div>
+      <!-- ===== TAB CÂU SAI ===== -->
+      <div id="tab-review" class="tab-content">
+        <section class="card">
+          <h2>❌ Câu sai của bạn</h2>
+          <div id="reviewStatus"></div>
+          <div id="reviewList"></div>
+          <div class="actions">
+            <button id="reviewPracticeBtn" style="display:none;">🔄 Ôn tập lại</button>
+            <button id="reviewClearBtn" class="ghost" style="display:none;">🗑️ Xóa danh sách</button>
+          </div>
+        </section>
       </div>
-    </div>
 
-    <!-- ===== TAB CÂU SAI ===== -->
-    <div id="tab-review" class="tab-content">
-      <section class="card">
-        <h2>❌ Câu sai của bạn</h2>
-        <div id="reviewStatus"></div>
-        <div id="reviewList"></div>
-        <div class="actions">
-          <button id="reviewPracticeBtn" style="display:none;">🔄 Ôn tập lại</button>
-          <button id="reviewClearBtn" class="ghost" style="display:none;">🗑️ Xóa danh sách</button>
-        </div>
-      </section>
-    </div>
-
-    <!-- ===== TAB LỊCH SỬ ===== -->
-    <div id="tab-history" class="tab-content">
-      <section class="card">
-        <h2>📊 Lịch sử làm bài</h2>
-        <p id="historyLoginNote" style="color:var(--text-muted);font-size:14px;">
-          💡 Đăng nhập để xem lịch sử từ mọi thiết bị.
-        </p>
-        <div id="historyList"></div>
-      </section>
-    </div>
+      <!-- ===== TAB LỊCH SỬ ===== -->
+      <div id="tab-history" class="tab-content">
+        <section class="card">
+          <h2>📊 Lịch sử làm bài</h2>
+          <p id="historyLoginNote" style="color:var(--text-muted);font-size:14px;">
+            💡 Đăng nhập để xem lịch sử từ mọi thiết bị.
+          </p>
+          <div id="historyList"></div>
+        </section>
+      </div>
+    </div><!-- end #appContent -->
   </main>
 
   <!-- ===== MODAL AUTH ===== -->

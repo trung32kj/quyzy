@@ -36,10 +36,12 @@ onAuthChange(async (user) => {
       adminLink.style.display = (currentUserProfile?.role === "admin") ? "inline-flex" : "none";
     }
 
+    // Hiện nội dung app, ẩn màn hình chặn
+    $("loginWall").style.display = "none";
+    $("appContent").style.display = "block";
+
     closeAuthModal();
-    // Load lịch sử sau khi đăng nhập
     await syncFromCloud();
-    // Resume phiên dở
     initResume();
   } else {
     currentUser = null; currentUserProfile = null;
@@ -47,7 +49,14 @@ onAuthChange(async (user) => {
     $("authBtn").style.display = "inline-flex";
     const adminLink = $("adminLink");
     if (adminLink) adminLink.style.display = "none";
-    initResume();
+
+    // Ẩn nội dung, hiện màn hình yêu cầu đăng nhập
+    $("loginWall").style.display = "flex";
+    $("appContent").style.display = "none";
+
+    // Reset state
+    state = null; questions = []; workbook = null;
+    examState = null; examQuestions = []; examWorkbook = null;
   }
 });
 
@@ -187,6 +196,7 @@ initResume();
 //  AUTH MODAL
 // ================================================================
 $("authBtn").addEventListener("click", openAuthModal);
+$("loginWallBtn")?.addEventListener("click", openAuthModal);
 $("closeAuthModal").addEventListener("click", closeAuthModal);
 $("authModal").addEventListener("click", (e) => { if (e.target === $("authModal")) closeAuthModal(); });
 
