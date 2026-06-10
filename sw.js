@@ -1,7 +1,7 @@
 // Service Worker cho Quiz PWA — chiến lược cache-first cho app shell.
 // Tăng VERSION mỗi lần đổi file static để force cập nhật cache.
 
-const VERSION = "v1.2.0";
+const VERSION = "v1.3.0";
 const CACHE_NAME = `quiz-pwa-${VERSION}`;
 
 // Danh sách asset cần cache để app chạy 100% offline.
@@ -15,6 +15,7 @@ const APP_SHELL = [
   "./js/quiz.js",
   "./js/storage.js",
   "./js/utils.js",
+  "./js/firebase.js",
   "./vendor/xlsx.full.min.js",
   "./vendor/idb-keyval.umd.js",
   "./icons/icon-192.png",

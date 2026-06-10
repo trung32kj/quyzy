@@ -1,261 +1,283 @@
-// Bootstrap UI: bind sự kiện DOM với logic trong parser.js + quiz.js.
+// Bootstrap UI — Quiz PWA với Firebase Auth + Firestore sync
 
 import { readWorkbook, parseSheet } from "./parser.js";
-import {
-  createState, recordAnswer, isCorrect, roundResult, nextRound as nextRoundFn,
-} from "./quiz.js";
+import { createState, recordAnswer, roundResult, nextRound as nextRoundFn } from "./quiz.js";
 import {
   saveCurrentSession, loadCurrentSession, clearCurrentSession,
-  saveAttempt, getAllAttempts, clearAttempts,
-  saveWrongQuestions, getWrongQuestions, clearWrongQuestions,
-  getCurrentUser, setCurrentUser, clearCurrentUser,
+  saveAttempt, saveWrongQuestions, getWrongQuestions, clearWrongQuestions,
 } from "./storage.js";
+import {
+  auth, onAuthChange,
+  registerWithEmail, loginWithEmail, loginWithGoogle, logout,
+  cloudSaveWrongQuestions, cloudGetWrongQuestions, cloudClearWrongQuestions,
+  cloudSaveAttempt,
+} from "./firebase.js";
 
 const $ = (id) => document.getElementById(id);
 
-// ===== State toàn cục =====
+// ===== Auth state =====
+let currentUser = null;
+
+onAuthChange((user) => {
+  currentUser = user;
+  if (user) {
+    $("userInfo").style.display = "flex";
+    $("authBtn").style.display = "none";
+    $("currentUserDisplay").textContent = user.displayName || user.email.split("@")[0];
+    closeAuthModal();
+  } else {
+    $("userInfo").style.display = "none";
+    $("authBtn").style.display = "inline-flex";
+  }
+});
+
+// ===== Quiz state =====
 let workbook = null;
 let questions = [];
 let state = null;
 let currentSheetName = "";
 
-// ===== Exam mode state =====
+// ===== Exam state =====
 let examWorkbook = null;
 let examQuestions = [];
 let examState = null;
 let examTimerInterval = null;
 let examTimeRemaining = 0;
 
-// Debounce auto-save
+// ===== Helpers: lưu câu sai (local + cloud nếu đã login) =====
+async function persistWrongQuestions(items) {
+  await saveWrongQuestions(items).catch((e) => console.warn("local wrong save:", e));
+  if (currentUser) {
+    await cloudSaveWrongQuestions(currentUser.uid, items).catch((e) => console.warn("cloud wrong save:", e));
+  }
+}
+
+async function persistAttempt(attempt) {
+  await saveAttempt(attempt).catch((e) => console.warn("local attempt save:", e));
+  if (currentUser) {
+    await cloudSaveAttempt(currentUser.uid, attempt).catch((e) => console.warn("cloud attempt save:", e));
+  }
+}
+
+// ===== Auto-save phiên học =====
 let saveTimer = null;
 function scheduleSave() {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     if (state && questions.length) {
-      saveCurrentSession({
-        sheetName: currentSheetName,
-        questions,
-        state,
-        savedAt: new Date().toISOString(),
-      }).catch((e) => console.warn("save failed", e));
+      saveCurrentSession({ sheetName: currentSheetName, questions, state, savedAt: new Date().toISOString() })
+        .catch((e) => console.warn("session save:", e));
     }
   }, 300);
 }
 
-// ===== Khởi động: kiểm tra phiên dở =====
+// ===== Service Worker =====
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js")
+      .then((r) => console.log("SW:", r.scope))
+      .catch((e) => console.warn("SW fail:", e));
+  });
+}
+
+// ===== Theme =====
+function applyTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  $("iconSun").style.display = t === "dark" ? "none" : "block";
+  $("iconMoon").style.display = t === "dark" ? "block" : "none";
+  try { localStorage.setItem("theme", t); } catch { }
+}
+(function initTheme() {
+  const t = document.documentElement.getAttribute("data-theme") || "light";
+  applyTheme(t);
+  $("themeBtn").addEventListener("click", () => {
+    applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
+  });
+})();
+
+// ===== Sticky header =====
+window.addEventListener("scroll", () => {
+  document.querySelector(".topbar")?.classList.toggle("scrolled", window.scrollY > 4);
+}, { passive: true });
+
+// ===== Resume phiên dở =====
 async function initResume() {
   try {
     const session = await loadCurrentSession();
-    if (session && session.state && session.questions) {
+    if (session?.state && session?.questions) {
       const r = session.state.currentRound + 1;
-      const total = session.state.rounds.length;
       $("resumeText").textContent =
-        `Phiên đang dở: "${session.sheetName}" — vòng ${r}/${total} ` +
-        `(lưu lúc ${formatTime(session.savedAt)}).`;
+        `Phiên đang dở: "${session.sheetName}" — vòng ${r}/${session.state.rounds.length} (lưu lúc ${formatTime(session.savedAt)}).`;
       $("resumeBanner").style.display = "flex";
-      $("resumeBtn").onclick = () => resumeSession(session);
+      $("resumeBtn").onclick = () => {
+        questions = session.questions; state = session.state;
+        currentSheetName = session.sheetName;
+        $("resumeBanner").style.display = "none";
+        $("quizArea").style.display = "block";
+        loadCurrentRound();
+      };
       $("discardBtn").onclick = async () => {
         await clearCurrentSession();
         $("resumeBanner").style.display = "none";
       };
     }
-  } catch (e) {
-    console.warn("Không load được phiên cũ:", e);
-  }
+  } catch (e) { console.warn("resume:", e); }
 }
-if (document.readyState === "loading") {
-  window.addEventListener("DOMContentLoaded", initResume);
-} else {
-  initResume();
-}
+initResume();
 
-// ===== Service Worker (PWA offline) =====
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js")
-      .then((reg) => console.log("SW registered:", reg.scope))
-      .catch((err) => console.warn("SW register failed:", err));
-  });
-}
-
-// ===== Theme toggle =====
-function applyTheme(theme) {
-  document.documentElement.setAttribute("data-theme", theme);
-  $("iconSun").style.display = theme === "dark" ? "none" : "block";
-  $("iconMoon").style.display = theme === "dark" ? "block" : "none";
-  try { localStorage.setItem("theme", theme); } catch { }
-}
-function initTheme() {
-  const t = document.documentElement.getAttribute("data-theme") || "light";
-  applyTheme(t);
-  $("themeBtn").addEventListener("click", () => {
-    const cur = document.documentElement.getAttribute("data-theme");
-    applyTheme(cur === "dark" ? "light" : "dark");
-  });
-}
-if (document.readyState === "loading") {
-  window.addEventListener("DOMContentLoaded", initTheme);
-} else {
-  initTheme();
-}
-
-// ===== Sticky topbar shadow on scroll =====
-window.addEventListener("scroll", () => {
-  const tb = document.querySelector(".topbar");
-  if (!tb) return;
-  if (window.scrollY > 4) tb.classList.add("scrolled");
-  else tb.classList.remove("scrolled");
-}, { passive: true });
-
-// ===== User Login/Logout =====
-async function initUserAuth() {
-  const currentUser = await getCurrentUser();
-  if (currentUser) {
-    // User already logged in
-    $("loginModal").style.display = "none";
-    $("userBtn").style.display = "flex";
-    $("currentUserDisplay").textContent = currentUser;
-  } else {
-    // Show login modal
-    $("loginModal").style.display = "flex";
-    $("userBtn").style.display = "none";
-  }
-
-  // Login button
-  $("loginBtn").addEventListener("click", async () => {
-    const username = $("usernameInput").value.trim();
-    if (!username) {
-      alert("Vui lòng nhập tên người dùng!");
-      return;
-    }
-    await setCurrentUser(username);
-    $("loginModal").style.display = "none";
-    $("userBtn").style.display = "flex";
-    $("currentUserDisplay").textContent = username;
-    // Reload data for this user
-    await initResume();
-  });
-
-  // Logout button
-  $("userBtn").addEventListener("click", async () => {
-    if (confirm("Bạn có chắc muốn đăng xuất?")) {
-      await clearCurrentUser();
-      $("loginModal").style.display = "flex";
-      $("userBtn").style.display = "none";
-      $("usernameInput").value = "";
-      // Clear current session
-      state = null;
-      questions = [];
-      workbook = null;
-      $("quizArea").style.display = "none";
-      $("status").textContent = "";
-    }
-  });
-
-  // Allow Enter key to login
-  $("usernameInput").addEventListener("keypress", (e) => {
-    if (e.key === "Enter") {
-      $("loginBtn").click();
-    }
-  });
-}
-
-if (document.readyState === "loading") {
-  window.addEventListener("DOMContentLoaded", initUserAuth);
-} else {
-  initUserAuth();
-}
-
-function resumeSession(session) {
-  questions = session.questions;
-  state = session.state;
-  currentSheetName = session.sheetName;
-  $("resumeBanner").style.display = "none";
-  $("status").textContent = `Tiếp tục: ${questions.length} câu, vòng ${state.currentRound + 1}/${state.rounds.length}.`;
-  $("quizArea").style.display = "block";
-  loadCurrentRound();
-}
-
+// ===== Helpers =====
 function formatTime(iso) {
-  if (!iso) return "?";
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString("vi-VN");
-  } catch { return iso; }
+  try { return new Date(iso).toLocaleString("vi-VN"); } catch { return iso || "?"; }
 }
-
 function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
-// ===== Bước 1: upload file (Learn tab) =====
+// ================================================================
+//  AUTH MODAL
+// ================================================================
+$("authBtn").addEventListener("click", openAuthModal);
+$("closeAuthModal").addEventListener("click", closeAuthModal);
+$("authModal").addEventListener("click", (e) => { if (e.target === $("authModal")) closeAuthModal(); });
+
+function openAuthModal() { $("authModal").style.display = "flex"; }
+function closeAuthModal() { $("authModal").style.display = "none"; clearAuthErrors(); }
+function clearAuthErrors() {
+  $("loginError").textContent = "";
+  $("registerError").textContent = "";
+}
+
+// Tab switch trong modal
+$("tabLoginBtn").addEventListener("click", () => {
+  $("formLogin").style.display = "block";
+  $("formRegister").style.display = "none";
+  $("tabLoginBtn").classList.add("active");
+  $("tabRegisterBtn").classList.remove("active");
+  clearAuthErrors();
+});
+$("tabRegisterBtn").addEventListener("click", () => {
+  $("formLogin").style.display = "none";
+  $("formRegister").style.display = "block";
+  $("tabRegisterBtn").classList.add("active");
+  $("tabLoginBtn").classList.remove("active");
+  clearAuthErrors();
+});
+
+// Đăng nhập email
+$("loginEmailBtn").addEventListener("click", async () => {
+  const email = $("loginEmail").value.trim();
+  const pw = $("loginPassword").value;
+  if (!email || !pw) { $("loginError").textContent = "Vui lòng điền đầy đủ."; return; }
+  $("loginEmailBtn").disabled = true;
+  try {
+    await loginWithEmail(email, pw);
+  } catch (e) {
+    $("loginError").textContent = friendlyAuthError(e.code);
+  } finally {
+    $("loginEmailBtn").disabled = false;
+  }
+});
+
+// Đăng nhập Google
+$("loginGoogleBtn").addEventListener("click", async () => {
+  try { await loginWithGoogle(); }
+  catch (e) { $("loginError").textContent = friendlyAuthError(e.code); }
+});
+
+// Đăng ký email
+$("registerBtn").addEventListener("click", async () => {
+  const name = $("regName").value.trim();
+  const email = $("regEmail").value.trim();
+  const pw = $("regPassword").value;
+  if (!name || !email || !pw) { $("registerError").textContent = "Vui lòng điền đầy đủ."; return; }
+  if (pw.length < 6) { $("registerError").textContent = "Mật khẩu tối thiểu 6 ký tự."; return; }
+  $("registerBtn").disabled = true;
+  try {
+    await registerWithEmail(email, pw, name);
+  } catch (e) {
+    $("registerError").textContent = friendlyAuthError(e.code);
+  } finally {
+    $("registerBtn").disabled = false;
+  }
+});
+
+// Đăng ký Google
+$("registerGoogleBtn").addEventListener("click", async () => {
+  try { await loginWithGoogle(); }
+  catch (e) { $("registerError").textContent = friendlyAuthError(e.code); }
+});
+
+// Enter key
+[$("loginEmail"), $("loginPassword")].forEach((el) =>
+  el.addEventListener("keydown", (e) => { if (e.key === "Enter") $("loginEmailBtn").click(); })
+);
+[$("regName"), $("regEmail"), $("regPassword")].forEach((el) =>
+  el.addEventListener("keydown", (e) => { if (e.key === "Enter") $("registerBtn").click(); })
+);
+
+// Đăng xuất
+$("logoutBtn").addEventListener("click", async () => {
+  if (confirm("Đăng xuất?")) await logout();
+});
+
+function friendlyAuthError(code) {
+  const map = {
+    "auth/user-not-found": "Email không tồn tại.",
+    "auth/wrong-password": "Sai mật khẩu.",
+    "auth/email-already-in-use": "Email đã được dùng.",
+    "auth/invalid-email": "Email không hợp lệ.",
+    "auth/weak-password": "Mật khẩu quá yếu (tối thiểu 6 ký tự).",
+    "auth/popup-closed-by-user": "Đã đóng cửa sổ đăng nhập.",
+    "auth/network-request-failed": "Lỗi mạng, thử lại.",
+    "auth/invalid-credential": "Sai email hoặc mật khẩu.",
+  };
+  return map[code] || "Lỗi: " + code;
+}
+
+// ================================================================
+//  TAB NAVIGATION
+// ================================================================
+document.querySelectorAll(".tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const tabId = btn.getAttribute("data-tab");
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
+    btn.classList.add("active");
+    $(`tab-${tabId}`).classList.add("active");
+    if (tabId === "review") loadReviewData();
+  });
+});
+
+// ================================================================
+//  TAB HỌC
+// ================================================================
 $("upload").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+  const file = e.target.files[0]; if (!file) return;
   $("status").textContent = `Đang đọc ${file.name}...`;
   try {
-    const buffer = await file.arrayBuffer();
-    const info = readWorkbook(buffer);
+    const info = readWorkbook(await file.arrayBuffer());
     workbook = info.workbook;
-    populateSheetSelect(info.sheetNames, info.answerSheet);
+    populateSelect($("sheetSelect"), info.sheetNames, info.answerSheet);
     $("sheetSelector").classList.add("show");
-    $("status").textContent =
-      `Đã đọc ${info.sheetNames.length} sheet. ` +
-      (info.answerSheet
-        ? `Gợi ý chọn sheet "${info.answerSheet}" (chứa đáp án có dấu *).`
-        : "Chọn sheet phù hợp.");
-  } catch (err) {
-    $("status").textContent = "Lỗi: " + err.message;
-    console.error(err);
-  }
+    $("status").textContent = `Đã đọc ${info.sheetNames.length} sheet.` +
+      (info.answerSheet ? ` Gợi ý: "${info.answerSheet}".` : "");
+  } catch (err) { $("status").textContent = "Lỗi: " + err.message; }
 });
 
-function populateSheetSelect(names, defaultName) {
-  const sel = $("sheetSelect");
-  sel.innerHTML = "";
-  names.forEach((n) => {
-    const opt = document.createElement("option");
-    opt.value = n;
-    opt.textContent = n;
-    if (n === defaultName) opt.selected = true;
-    sel.appendChild(opt);
-  });
-}
-
-// ===== Bước 2: chọn sheet → parse (Learn tab) =====
 $("loadSheetBtn").addEventListener("click", () => {
-  const sheetName = $("sheetSelect").value;
   try {
-    const result = parseSheet(workbook, sheetName);
-    questions = result.questions;
-    currentSheetName = sheetName;
-    if (questions.length === 0) {
-      $("status").textContent = `Sheet "${sheetName}" không có câu hỏi hợp lệ.`;
-      return;
-    }
-    const detail = result.info
-      ? ` [đáp án: ${result.info.starUsed} qua dấu *, ${result.info.highlightUsed} qua tô màu]`
-      : "";
-    $("status").textContent =
-      `Schema ${result.schema} | ${questions.length} câu hỏi` +
-      (result.skipped ? ` (bỏ qua ${result.skipped} dòng không hợp lệ)` : "") +
-      detail;
+    const result = parseSheet(workbook, $("sheetSelect").value);
+    questions = result.questions; currentSheetName = $("sheetSelect").value;
+    if (!questions.length) { $("status").textContent = "Không có câu hỏi hợp lệ."; return; }
+    $("status").textContent = `${questions.length} câu hỏi (Schema ${result.schema})` +
+      (result.skipped ? ` — bỏ ${result.skipped} dòng lỗi` : "");
     $("settings").classList.add("show");
-  } catch (err) {
-    $("status").textContent = "Lỗi: " + err.message;
-    console.error(err);
-  }
+  } catch (err) { $("status").textContent = "Lỗi: " + err.message; }
 });
 
-// ===== Bước 3: tạo vòng (Learn tab) =====
 $("startBtn").addEventListener("click", () => {
-  const num = parseInt($("numPerRound").value, 10);
-  state = createState(questions, num);
+  state = createState(questions, parseInt($("numPerRound").value, 10));
   $("settings").classList.remove("show");
   $("quizArea").style.display = "block";
   loadCurrentRound();
@@ -263,18 +285,15 @@ $("startBtn").addEventListener("click", () => {
 });
 
 function loadCurrentRound() {
-  $("roundInfo").textContent =
-    `Vòng ${state.currentRound + 1}/${state.rounds.length}`;
+  $("roundInfo").textContent = `Vòng ${state.currentRound + 1}/${state.rounds.length}`;
   renderRound();
-  const alreadySubmitted = state.submitted[state.currentRound];
-  const isLastRound = state.currentRound >= state.rounds.length - 1;
-  $("submitBtn").style.display = "none"; // Tab Học: feedback hiện ngay, không cần nút Nộp
-  $("nextBtn").style.display = (alreadySubmitted && !isLastRound) ? "inline-block" : "none";
-  if (alreadySubmitted) {
+  const done = state.submitted[state.currentRound];
+  const last = state.currentRound >= state.rounds.length - 1;
+  $("submitBtn").style.display = "none";
+  $("nextBtn").style.display = (done && !last) ? "inline-block" : "none";
+  if (done) {
     const r = roundResult(state);
-    $("result").textContent =
-      `🎯 Vòng ${state.currentRound + 1}: đúng ${r.correct}/${r.total}` +
-      (r.unanswered ? ` (chưa làm: ${r.unanswered})` : "");
+    $("result").textContent = `🎯 Vòng ${state.currentRound + 1}: đúng ${r.correct}/${r.total}`;
   } else {
     $("result").textContent = "";
   }
@@ -282,288 +301,111 @@ function loadCurrentRound() {
 
 function renderRound() {
   const round = state.rounds[state.currentRound];
-  const quiz = $("quiz");
-  quiz.innerHTML = "";
-  const progress = $("progress");
-  progress.innerHTML = "";
   const submitted = state.submitted[state.currentRound];
-
+  $("quiz").innerHTML = "";
+  $("progress").innerHTML = "";
   round.forEach((item, qi) => {
     const box = document.createElement("div");
-    box.className = "question";
-    box.id = `qbox${qi}`;
-    box.innerHTML =
-      `<h3>Câu ${qi + 1}/${round.length}: ${escapeHtml(item.question)}</h3>` +
+    box.className = "question"; box.id = `qbox${qi}`;
+    box.innerHTML = `<h3>Câu ${qi + 1}/${round.length}: ${escapeHtml(item.question)}</h3>` +
       item.options.map((opt, oi) => {
         const checked = state.answers[state.currentRound][qi] === oi ? "checked" : "";
         const letter = String.fromCharCode(65 + oi);
-        return (
-          `<label class="option">` +
-          `<input type="radio" name="q${qi}" value="${oi}" ${checked} ` +
-          `onchange="window.__onPick(${qi}, ${oi})" />` +
-          ` ${letter}. ${escapeHtml(opt)}` +
-          `</label>`
-        );
-      }).join("") +
-      `<div class="feedback" id="fb${qi}"></div>`;
-    quiz.appendChild(box);
+        return `<label class="option"><input type="radio" name="q${qi}" value="${oi}" ${checked} onchange="window.__onPick(${qi},${oi})" /> ${letter}. ${escapeHtml(opt)}</label>`;
+      }).join("") + `<div class="feedback" id="fb${qi}"></div>`;
+    $("quiz").appendChild(box);
 
     const dot = document.createElement("div");
-    dot.className = "progress-item unanswered";
-    dot.id = `prog${qi}`;
-    dot.textContent = qi + 1;
+    dot.className = "progress-item unanswered"; dot.id = `prog${qi}`; dot.textContent = qi + 1;
     dot.onclick = () => box.scrollIntoView({ behavior: "smooth" });
-    progress.appendChild(dot);
+    $("progress").appendChild(dot);
 
     const ans = state.answers[state.currentRound][qi];
-    if (ans != null) {
-      reflectAnswer(qi, ans, submitted);
-    }
+    if (ans != null) reflectAnswer(qi, ans, submitted);
   });
 }
 
-function reflectAnswer(qi, optionIndex, showFeedback) {
+function reflectAnswer(qi, oi, showFeedback) {
   const item = state.rounds[state.currentRound][qi];
-  const dot = $(`prog${qi}`);
-  const fb = $(`fb${qi}`);
-  const box = $(`qbox${qi}`);
-
+  const dot = $(`prog${qi}`), fb = $(`fb${qi}`), box = $(`qbox${qi}`);
   if (showFeedback) {
-    if (optionIndex === item.correctIndex) {
+    if (oi === item.correctIndex) {
       dot.className = "progress-item correct";
-      fb.textContent = "✅ Chính xác!";
-      fb.className = "feedback correct";
-      box.classList.remove("incorrect");
-      box.classList.add("correct");
+      fb.textContent = "✅ Chính xác!"; fb.className = "feedback correct";
+      box.classList.replace("incorrect", "correct") || box.classList.add("correct");
     } else {
       dot.className = "progress-item incorrect";
-      const correctLetter = String.fromCharCode(65 + item.correctIndex);
-      fb.textContent = `❌ Sai. Đáp án đúng: ${correctLetter}. ${item.options[item.correctIndex]}`;
+      fb.textContent = `❌ Sai. Đáp án: ${String.fromCharCode(65 + item.correctIndex)}. ${item.options[item.correctIndex]}`;
       fb.className = "feedback incorrect";
-      box.classList.remove("correct");
-      box.classList.add("incorrect");
+      box.classList.replace("correct", "incorrect") || box.classList.add("incorrect");
     }
   } else {
     dot.className = "progress-item answered";
   }
 }
 
-window.__onPick = function (qi, optionIndex) {
-  recordAnswer(state, qi, optionIndex);
-  // Tab Học: hiện feedback ngay khi chọn đáp án
-  reflectAnswer(qi, optionIndex, true);
-
-  // Kiểm tra đã trả lời hết chưa → tự động "submit" để mở nút Vòng tiếp theo
+window.__onPick = function (qi, oi) {
+  recordAnswer(state, qi, oi);
+  reflectAnswer(qi, oi, true);
   const round = state.rounds[state.currentRound];
-  const allAnswered = state.answers[state.currentRound].every((a) => a != null);
-  if (allAnswered && !state.submitted[state.currentRound]) {
+  const allDone = state.answers[state.currentRound].every((a) => a != null);
+  if (allDone && !state.submitted[state.currentRound]) {
     state.submitted[state.currentRound] = true;
     const r = roundResult(state);
-    $("result").textContent =
-      `🎯 Vòng ${state.currentRound + 1}: đúng ${r.correct}/${r.total}`;
-    $("submitBtn").style.display = "none";
-    const isLastRound = state.currentRound >= state.rounds.length - 1;
-    if (!isLastRound) {
-      $("nextBtn").style.display = "inline-block";
-    }
-    // Lưu câu sai
-    const wrongItems = [];
-    for (let i = 0; i < round.length; i++) {
-      const ans = state.answers[state.currentRound][i];
-      const item = round[i];
-      if (ans !== item.correctIndex) {
-        wrongItems.push({ id: item.id, question: item.question, options: item.options, correctIndex: item.correctIndex, picked: ans });
-      }
-    }
-    saveAttempt({
-      timestamp: new Date().toISOString(),
-      sheetName: currentSheetName,
-      roundIndex: state.currentRound,
-      correct: r.correct,
-      total: r.total,
-      unanswered: 0,
-      wrongQuestions: wrongItems,
-    }).catch((e) => console.warn("saveAttempt failed", e));
-    if (wrongItems.length > 0) {
-      saveWrongQuestions(wrongItems).catch((e) => console.warn("saveWrongQuestions failed", e));
-    }
+    $("result").textContent = `🎯 Vòng ${state.currentRound + 1}: đúng ${r.correct}/${r.total}`;
+    if (state.currentRound < state.rounds.length - 1) $("nextBtn").style.display = "inline-block";
+    const wrong = round.map((item, i) => {
+      const a = state.answers[state.currentRound][i];
+      return a !== item.correctIndex ? { id: item.id, question: item.question, options: item.options, correctIndex: item.correctIndex, picked: a } : null;
+    }).filter(Boolean);
+    persistAttempt({ timestamp: new Date().toISOString(), sheetName: currentSheetName, roundIndex: state.currentRound, correct: r.correct, total: r.total, unanswered: 0, wrongQuestions: wrong });
+    if (wrong.length) persistWrongQuestions(wrong);
   }
-
   scheduleSave();
 };
 
-// ===== Bước 4: nộp bài (Learn tab) =====
-$("submitBtn").addEventListener("click", () => {
-  state.submitted[state.currentRound] = true;
-  const round = state.rounds[state.currentRound];
-  for (let qi = 0; qi < round.length; qi++) {
-    const ans = state.answers[state.currentRound][qi];
-    if (ans != null) {
-      reflectAnswer(qi, ans, true);
-    } else {
-      const item = round[qi];
-      const correctLetter = String.fromCharCode(65 + item.correctIndex);
-      $(`fb${qi}`).textContent = `⚠️ Chưa trả lời. Đáp án đúng: ${correctLetter}. ${item.options[item.correctIndex]}`;
-      $(`fb${qi}`).className = "feedback incorrect";
-      $(`prog${qi}`).className = "progress-item unanswered";
-    }
-  }
-  const r = roundResult(state);
-  $("result").textContent =
-    `🎯 Vòng ${state.currentRound + 1}: đúng ${r.correct}/${r.total}` +
-    (r.unanswered ? ` (chưa làm: ${r.unanswered})` : "");
-  $("submitBtn").style.display = "none";
-  const isLastRound = state.currentRound >= state.rounds.length - 1;
-  if (!isLastRound) {
-    $("nextBtn").style.display = "inline-block";
-  }
-
-  // Lưu câu sai (đủ thông tin để ôn tập lại)
-  const wrongItems = [];
-  for (let qi = 0; qi < round.length; qi++) {
-    const ans = state.answers[state.currentRound][qi];
-    const item = round[qi];
-    if (ans !== item.correctIndex) {
-      wrongItems.push({
-        id: item.id,
-        question: item.question,
-        options: item.options,
-        correctIndex: item.correctIndex,
-        picked: ans,
-      });
-    }
-  }
-
-  // Lưu attempt history
-  saveAttempt({
-    timestamp: new Date().toISOString(),
-    sheetName: currentSheetName,
-    roundIndex: state.currentRound,
-    correct: r.correct,
-    total: r.total,
-    unanswered: r.unanswered,
-    wrongQuestions: wrongItems,
-  }).catch((e) => console.warn("saveAttempt failed", e));
-
-  // Lưu danh sách câu sai vào kho ôn tập
-  if (wrongItems.length > 0) {
-    saveWrongQuestions(wrongItems).catch((e) => console.warn("saveWrongQuestions failed", e));
-  }
-
-  scheduleSave();
-});
+$("submitBtn").addEventListener("click", () => { /* ẩn — tab Học tự submit */ });
 
 $("nextBtn").addEventListener("click", () => {
-  if (nextRoundFn(state)) {
-    loadCurrentRound();
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    scheduleSave();
-  }
+  if (nextRoundFn(state)) { loadCurrentRound(); scrollTo({ top: 0, behavior: "smooth" }); scheduleSave(); }
 });
 
-// ===== Tab Navigation =====
-function initTabs() {
-  const tabBtns = document.querySelectorAll(".tab-btn");
-  const tabContents = document.querySelectorAll(".tab-content");
-
-  tabBtns.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const tabId = btn.getAttribute("data-tab");
-      tabBtns.forEach((b) => b.classList.remove("active"));
-      tabContents.forEach((c) => c.classList.remove("active"));
-      btn.classList.add("active");
-      document.getElementById(`tab-${tabId}`).classList.add("active");
-      if (tabId === "review") {
-        loadReviewData();
-      }
-    });
-  });
-}
-
-if (document.readyState === "loading") {
-  window.addEventListener("DOMContentLoaded", initTabs);
-} else {
-  initTabs();
-}
-
-// ===== Exam Mode =====
+// ================================================================
+//  TAB THI
+// ================================================================
 $("examUpload").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+  const file = e.target.files[0]; if (!file) return;
   $("examStatus").textContent = `Đang đọc ${file.name}...`;
   try {
-    const buffer = await file.arrayBuffer();
-    const info = readWorkbook(buffer);
+    const info = readWorkbook(await file.arrayBuffer());
     examWorkbook = info.workbook;
-    populateExamSheetSelect(info.sheetNames, info.answerSheet);
+    populateSelect($("examSheetSelect"), info.sheetNames, info.answerSheet);
     $("examSheetSelector").classList.add("show");
-    $("examStatus").textContent =
-      `Đã đọc ${info.sheetNames.length} sheet. ` +
-      (info.answerSheet
-        ? `Gợi ý chọn sheet "${info.answerSheet}" (chứa đáp án có dấu *).`
-        : "Chọn sheet phù hợp.");
-  } catch (err) {
-    $("examStatus").textContent = "Lỗi: " + err.message;
-    console.error(err);
-  }
+    $("examStatus").textContent = `Đã đọc ${info.sheetNames.length} sheet.`;
+  } catch (err) { $("examStatus").textContent = "Lỗi: " + err.message; }
 });
 
-function populateExamSheetSelect(names, defaultName) {
-  const sel = $("examSheetSelect");
-  sel.innerHTML = "";
-  names.forEach((n) => {
-    const opt = document.createElement("option");
-    opt.value = n;
-    opt.textContent = n;
-    if (n === defaultName) opt.selected = true;
-    sel.appendChild(opt);
-  });
-}
-
 $("examLoadSheetBtn").addEventListener("click", () => {
-  const sheetName = $("examSheetSelect").value;
   try {
-    const result = parseSheet(examWorkbook, sheetName);
+    const result = parseSheet(examWorkbook, $("examSheetSelect").value);
     examQuestions = result.questions;
-    if (examQuestions.length === 0) {
-      $("examStatus").textContent = `Sheet "${sheetName}" không có câu hỏi hợp lệ.`;
-      return;
-    }
-    const detail = result.info
-      ? ` [đáp án: ${result.info.starUsed} qua dấu *, ${result.info.highlightUsed} qua tô màu]`
-      : "";
-    $("examStatus").textContent =
-      `Schema ${result.schema} | ${examQuestions.length} câu hỏi` +
-      (result.skipped ? ` (bỏ qua ${result.skipped} dòng không hợp lệ)` : "") +
-      detail;
+    if (!examQuestions.length) { $("examStatus").textContent = "Không có câu hỏi hợp lệ."; return; }
+    $("examStatus").textContent = `${examQuestions.length} câu hỏi (Schema ${result.schema})`;
     $("examSettings").classList.add("show");
     $("examTimerSettings").classList.add("show");
     $("examStartBtnRow").classList.add("show");
-  } catch (err) {
-    $("examStatus").textContent = "Lỗi: " + err.message;
-    console.error(err);
-  }
+  } catch (err) { $("examStatus").textContent = "Lỗi: " + err.message; }
 });
 
 $("examStartBtn").addEventListener("click", () => {
-  if (!examQuestions.length) {
-    $("examStatus").textContent = "Vui lòng tải file và chọn sheet trước.";
-    return;
-  }
+  if (!examQuestions.length) { $("examStatus").textContent = "Chưa tải câu hỏi."; return; }
   const num = parseInt($("examNumPerRound").value, 10);
-  const minutes = parseInt($("examTimer").value, 10);
   examState = createState(examQuestions, num);
-  examTimeRemaining = minutes * 60;
-
-  // Ẩn phần cài đặt
-  $("examSheetSelector").classList.remove("show");
-  $("examSettings").classList.remove("show");
-  $("examTimerSettings").classList.remove("show");
-  $("examStartBtnRow").classList.remove("show");
+  examTimeRemaining = parseInt($("examTimer").value, 10) * 60;
+  ["examSheetSelector", "examSettings", "examTimerSettings", "examStartBtnRow"].forEach((id) =>
+    $(id).classList.remove("show"));
   $("examArea").style.display = "block";
-
-  startExamTimer();
-  loadExamRound();
+  startExamTimer(); loadExamRound();
 });
 
 function startExamTimer() {
@@ -571,277 +413,159 @@ function startExamTimer() {
   examTimerInterval = setInterval(() => {
     examTimeRemaining--;
     updateTimerDisplay();
-    if (examTimeRemaining <= 0) {
-      clearInterval(examTimerInterval);
-      examTimerInterval = null;
-      submitExam(true);
-    }
+    if (examTimeRemaining <= 0) { clearInterval(examTimerInterval); examTimerInterval = null; submitExam(true); }
   }, 1000);
 }
 
 function updateTimerDisplay() {
-  const minutes = Math.floor(examTimeRemaining / 60);
-  const seconds = examTimeRemaining % 60;
-  const display = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  $("examTimerDisplay").textContent = `⏱️ ${display}`;
-  if (examTimeRemaining <= 300) {
-    $("examTimerDisplay").classList.add("warning");
-  } else {
-    $("examTimerDisplay").classList.remove("warning");
-  }
+  const m = Math.floor(examTimeRemaining / 60), s = examTimeRemaining % 60;
+  $("examTimerDisplay").textContent = `⏱️ ${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  $("examTimerDisplay").classList.toggle("warning", examTimeRemaining <= 300);
 }
 
 function loadExamRound() {
-  $("examRoundInfo").textContent =
-    `Vòng ${examState.currentRound + 1}/${examState.rounds.length}`;
+  $("examRoundInfo").textContent = `Vòng ${examState.currentRound + 1}/${examState.rounds.length}`;
   renderExamRound();
 }
 
 function renderExamRound() {
   const round = examState.rounds[examState.currentRound];
-  const quiz = $("examQuiz");
-  quiz.innerHTML = "";
-  const progress = $("examProgress");
-  progress.innerHTML = "";
-  const submitted = examState.submitted[examState.currentRound];
-
+  $("examQuiz").innerHTML = ""; $("examProgress").innerHTML = "";
   round.forEach((item, qi) => {
     const box = document.createElement("div");
-    box.className = "question";
-    box.id = `examQbox${qi}`;
-    const checked = submitted ? "" : "";  // will be re-applied below
-    box.innerHTML =
-      `<h3>Câu ${qi + 1}/${round.length}: ${escapeHtml(item.question)}</h3>` +
+    box.className = "question"; box.id = `examQbox${qi}`;
+    box.innerHTML = `<h3>Câu ${qi + 1}/${round.length}: ${escapeHtml(item.question)}</h3>` +
       item.options.map((opt, oi) => {
-        const isChecked = examState.answers[examState.currentRound][qi] === oi ? "checked" : "";
         const letter = String.fromCharCode(65 + oi);
-        return (
-          `<label class="option" id="examOpt${qi}_${oi}">` +
-          `<input type="radio" name="examQ${qi}" value="${oi}" ${isChecked} ` +
-          `onchange="window.__onExamPick(${qi}, ${oi})" />` +
-          ` ${letter}. ${escapeHtml(opt)}` +
-          `</label>`
-        );
-      }).join("") +
-      `<div class="feedback" id="examFb${qi}"></div>`;
-    quiz.appendChild(box);
-
+        return `<label class="option"><input type="radio" name="examQ${qi}" value="${oi}" onchange="window.__onExamPick(${qi},${oi})" /> ${letter}. ${escapeHtml(opt)}</label>`;
+      }).join("") + `<div class="feedback" id="examFb${qi}"></div>`;
+    $("examQuiz").appendChild(box);
     const dot = document.createElement("div");
-    dot.className = "progress-item unanswered";
-    dot.id = `examProg${qi}`;
-    dot.textContent = qi + 1;
+    dot.className = "progress-item unanswered"; dot.id = `examProg${qi}`; dot.textContent = qi + 1;
     dot.onclick = () => box.scrollIntoView({ behavior: "smooth" });
-    progress.appendChild(dot);
-
-    const ans = examState.answers[examState.currentRound][qi];
-    if (ans != null) {
-      reflectExamAnswer(qi, ans, submitted);
-    }
+    $("examProgress").appendChild(dot);
   });
 }
 
-function reflectExamAnswer(qi, optionIndex, showFeedback) {
-  const item = examState.rounds[examState.currentRound][qi];
-  const dot = $(`examProg${qi}`);
-  const fb = $(`examFb${qi}`);
-  const box = $(`examQbox${qi}`);
-
-  if (showFeedback) {
-    if (optionIndex === item.correctIndex) {
-      dot.className = "progress-item correct";
-      fb.textContent = "✅ Chính xác!";
-      fb.className = "feedback correct";
-      box.classList.remove("incorrect");
-      box.classList.add("correct");
-    } else {
-      dot.className = "progress-item incorrect";
-      const correctLetter = String.fromCharCode(65 + item.correctIndex);
-      fb.textContent = `❌ Sai. Đáp án đúng: ${correctLetter}. ${item.options[item.correctIndex]}`;
-      fb.className = "feedback incorrect";
-      box.classList.remove("correct");
-      box.classList.add("incorrect");
-    }
-  } else {
-    dot.className = "progress-item answered";
-  }
-}
-
-window.__onExamPick = function (qi, optionIndex) {
-  if (examState.submitted[examState.currentRound]) return; // đã nộp → không cho chọn lại
-  recordAnswer(examState, qi, optionIndex);
+window.__onExamPick = function (qi, oi) {
+  if (examState.submitted[examState.currentRound]) return;
+  recordAnswer(examState, qi, oi);
   $(`examProg${qi}`).className = "progress-item answered";
 };
 
 $("examSubmitBtn").addEventListener("click", () => submitExam(false));
 
 function submitExam(timeUp = false) {
-  if (examTimerInterval) {
-    clearInterval(examTimerInterval);
-    examTimerInterval = null;
-  }
-
+  if (examTimerInterval) { clearInterval(examTimerInterval); examTimerInterval = null; }
   examState.submitted[examState.currentRound] = true;
   const round = examState.rounds[examState.currentRound];
+  document.querySelectorAll('#examQuiz input[type="radio"]').forEach((i) => i.disabled = true);
 
-  // Disable tất cả radio
-  document.querySelectorAll('#examQuiz input[type="radio"]').forEach((inp) => {
-    inp.disabled = true;
-  });
-
-  // Hiện feedback từng câu
-  let correct = 0;
-  let unanswered = 0;
-  const wrongItems = [];
-
+  let correct = 0, unanswered = 0;
+  const wrong = [];
   for (let qi = 0; qi < round.length; qi++) {
-    const ans = examState.answers[examState.currentRound][qi];
-    const item = round[qi];
-
+    const ans = examState.answers[examState.currentRound][qi], item = round[qi];
     if (ans == null) {
       unanswered++;
-      const correctLetter = String.fromCharCode(65 + item.correctIndex);
-      $(`examFb${qi}`).textContent = `⚠️ Chưa trả lời. Đáp án đúng: ${correctLetter}. ${item.options[item.correctIndex]}`;
+      $(`examFb${qi}`).textContent = `⚠️ Chưa trả lời. Đáp án: ${String.fromCharCode(65 + item.correctIndex)}. ${item.options[item.correctIndex]}`;
       $(`examFb${qi}`).className = "feedback incorrect";
       $(`examProg${qi}`).className = "progress-item unanswered";
-      wrongItems.push({ id: item.id, question: item.question, options: item.options, correctIndex: item.correctIndex, picked: null });
+      wrong.push({ id: item.id, question: item.question, options: item.options, correctIndex: item.correctIndex, picked: null });
     } else {
-      reflectExamAnswer(qi, ans, true);
-      if (ans === item.correctIndex) {
-        correct++;
-      } else {
-        wrongItems.push({ id: item.id, question: item.question, options: item.options, correctIndex: item.correctIndex, picked: ans });
+      const ok = ans === item.correctIndex;
+      if (ok) { correct++; $(`examProg${qi}`).className = "progress-item correct"; $(`examFb${qi}`).textContent = "✅ Chính xác!"; $(`examFb${qi}`).className = "feedback correct"; $(`examQbox${qi}`).classList.add("correct"); }
+      else {
+        $(`examProg${qi}`).className = "progress-item incorrect";
+        $(`examFb${qi}`).textContent = `❌ Sai. Đáp án: ${String.fromCharCode(65 + item.correctIndex)}. ${item.options[item.correctIndex]}`;
+        $(`examFb${qi}`).className = "feedback incorrect"; $(`examQbox${qi}`).classList.add("incorrect");
+        wrong.push({ id: item.id, question: item.question, options: item.options, correctIndex: item.correctIndex, picked: ans });
       }
     }
   }
-
-  const total = round.length;
-  const pct = total ? Math.round(correct / total * 100) : 0;
+  const total = round.length, pct = total ? Math.round(correct / total * 100) : 0;
   const grade = pct >= 80 ? "🏆 Xuất sắc" : pct >= 60 ? "✅ Đạt" : "❌ Chưa đạt";
-
   $("examResult").innerHTML =
-    `<div class="exam-result-box">` +
-    `<h2>${grade}</h2>` +
-    (timeUp ? `<p class="time-up-notice">⏰ Hết giờ — bài đã tự động nộp.</p>` : "") +
-    `<p>Đúng: <strong>${correct}</strong> / ${total} (<strong>${pct}%</strong>)</p>` +
-    `<p>Sai: <strong style="color:var(--danger)">${total - correct - unanswered}</strong> &nbsp;|&nbsp; Chưa làm: <strong style="color:var(--text-muted)">${unanswered}</strong></p>` +
-    (wrongItems.length > 0
-      ? `<p class="hint">💾 ${wrongItems.length} câu sai đã lưu vào tab <em>"Xem lại câu sai"</em> để ôn tập.</p>`
-      : `<p class="hint">🎉 Không có câu sai!</p>`) +
-    `<button id="examRetryBtn" class="ghost">🔄 Thi lại bộ câu này</button>` +
-    `</div>`;
+    `<div class="exam-result-box"><h2>${grade}</h2>` +
+    (timeUp ? `<p class="time-up-notice">⏰ Hết giờ — đã tự nộp.</p>` : "") +
+    `<p>Đúng: <strong>${correct}</strong>/${total} (<strong>${pct}%</strong>)</p>` +
+    `<p>Sai: <strong style="color:var(--danger)">${total - correct - unanswered}</strong> | Chưa làm: <strong style="color:var(--text-muted)">${unanswered}</strong></p>` +
+    (wrong.length ? `<p class="hint">💾 ${wrong.length} câu sai đã lưu vào "Xem lại câu sai".</p>` : `<p class="hint">🎉 Không có câu sai!</p>`) +
+    `<button id="examRetryBtn" class="ghost">🔄 Thi lại</button></div>`;
 
-  // Lưu wrong questions
-  if (wrongItems.length > 0) {
-    saveWrongQuestions(wrongItems).catch((e) => console.warn("saveWrongQuestions failed", e));
-  }
-
-  // Lưu attempt
-  saveAttempt({
-    timestamp: new Date().toISOString(),
-    sheetName: "Exam",
-    roundIndex: examState.currentRound,
-    correct,
-    total,
-    unanswered,
-    wrongQuestions: wrongItems,
-  }).catch((e) => console.warn("saveAttempt failed", e));
-
+  if (wrong.length) persistWrongQuestions(wrong);
+  persistAttempt({ timestamp: new Date().toISOString(), sheetName: "Exam", roundIndex: examState.currentRound, correct, total, unanswered, wrongQuestions: wrong });
   $("examSubmitBtn").style.display = "none";
   $("examResult").scrollIntoView({ behavior: "smooth" });
-
-  // Thi lại cùng bộ câu
   $("examRetryBtn").addEventListener("click", () => {
     if (examTimerInterval) clearInterval(examTimerInterval);
-    const num = examState.rounds[0].length;
-    const minutes = parseInt($("examTimer").value, 10);
-    examState = createState(examQuestions, num);
-    examTimeRemaining = minutes * 60;
-    // Reset UI
-    $("examResult").innerHTML = "";
-    $("examQuiz").innerHTML = "";
-    $("examProgress").innerHTML = "";
-    $("examRoundInfo").textContent = "";
-    $("examTimerDisplay").className = "timer-display";
+    examState = createState(examQuestions, examState.rounds[0].length);
+    examTimeRemaining = parseInt($("examTimer").value, 10) * 60;
+    $("examResult").innerHTML = ""; $("examQuiz").innerHTML = ""; $("examProgress").innerHTML = "";
+    $("examRoundInfo").textContent = ""; $("examTimerDisplay").className = "timer-display";
     $("examSubmitBtn").style.display = "";
-    startExamTimer();
-    loadExamRound();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    startExamTimer(); loadExamRound(); scrollTo({ top: 0, behavior: "smooth" });
   });
 }
 
-// ===== Review Mode (Xem lại câu sai) =====
+// ================================================================
+//  TAB XEM LẠI CÂU SAI
+// ================================================================
 async function loadReviewData() {
-  const reviewStatus = $("reviewStatus");
-  const reviewList = $("reviewList");
-  const practiceBtn = $("reviewPracticeBtn");
-  const clearBtn = $("reviewClearBtn");
+  const status = $("reviewStatus"), list = $("reviewList");
+  const practiceBtn = $("reviewPracticeBtn"), clearBtn = $("reviewClearBtn");
 
-  try {
-    const wrongQuestions = await getWrongQuestions();
-
-    if (!wrongQuestions || wrongQuestions.length === 0) {
-      reviewStatus.textContent = "Chưa có câu sai nào. Làm bài rồi quay lại đây!";
-      reviewList.innerHTML = "";
-      practiceBtn.style.display = "none";
-      clearBtn.style.display = "none";
-      return;
-    }
-
-    reviewStatus.textContent = `Có ${wrongQuestions.length} câu sai (từ các lần làm bài):`;
-    reviewList.innerHTML = wrongQuestions.map((q, index) => {
-      const pickedText = q.picked != null
-        ? `${String.fromCharCode(65 + q.picked)}. ${escapeHtml(q.options[q.picked])}`
-        : "Chưa chọn";
-      const correctText = `${String.fromCharCode(65 + q.correctIndex)}. ${escapeHtml(q.options[q.correctIndex])}`;
-      return `
-        <div class="review-item">
-          <h4>${index + 1}. ${escapeHtml(q.question)}</h4>
-          <div class="your-answer">Bạn chọn: ${pickedText}</div>
-          <div class="correct-answer">Đáp án đúng: ${correctText}</div>
-        </div>
-      `;
-    }).join("");
-
-    practiceBtn.style.display = "inline-block";
-    clearBtn.style.display = "inline-block";
-
-    practiceBtn.onclick = () => practiceWrongQuestions(wrongQuestions);
-    clearBtn.onclick = async () => {
-      if (confirm("Xóa toàn bộ danh sách câu sai?")) {
-        await clearWrongQuestions();
-        loadReviewData();
-      }
-    };
-  } catch (e) {
-    console.error("Error loading review data:", e);
-    reviewStatus.textContent = "Lỗi khi tải dữ liệu.";
+  // Ưu tiên cloud nếu đã đăng nhập
+  let wrong = [];
+  if (currentUser) {
+    try { wrong = await cloudGetWrongQuestions(currentUser.uid); } catch { }
+    // Sync về local
+    if (wrong.length) saveWrongQuestions(wrong).catch(() => { });
+  } else {
+    wrong = await getWrongQuestions().catch(() => []);
   }
+
+  if (!wrong.length) {
+    status.textContent = "Chưa có câu sai nào. Làm bài rồi quay lại!";
+    list.innerHTML = ""; practiceBtn.style.display = "none"; clearBtn.style.display = "none";
+    return;
+  }
+  status.textContent = `Có ${wrong.length} câu sai:`;
+  list.innerHTML = wrong.map((q, i) => {
+    const picked = q.picked != null ? `${String.fromCharCode(65 + q.picked)}. ${escapeHtml(q.options[q.picked])}` : "Chưa chọn";
+    const correct = `${String.fromCharCode(65 + q.correctIndex)}. ${escapeHtml(q.options[q.correctIndex])}`;
+    return `<div class="review-item"><h4>${i + 1}. ${escapeHtml(q.question)}</h4>
+      <div class="your-answer">Bạn chọn: ${picked}</div>
+      <div class="correct-answer">Đáp án đúng: ${correct}</div></div>`;
+  }).join("");
+  practiceBtn.style.display = "inline-block"; clearBtn.style.display = "inline-block";
+  practiceBtn.onclick = () => practiceWrong(wrong);
+  clearBtn.onclick = async () => {
+    if (!confirm("Xóa toàn bộ câu sai?")) return;
+    await clearWrongQuestions().catch(() => { });
+    if (currentUser) await cloudClearWrongQuestions(currentUser.uid).catch(() => { });
+    loadReviewData();
+  };
 }
 
-/**
- * Ôn tập lại các câu sai: chuyển sang tab Học và bắt đầu quiz với đúng bộ câu đó.
- * Câu sai đã có đủ options + correctIndex (lưu sau khi xáo đáp án) nên có thể dùng trực tiếp.
- */
-function practiceWrongQuestions(wrongQuestions) {
-  // Chuyển sang tab Học
+function practiceWrong(wrong) {
   document.querySelector('[data-tab="learn"]').click();
-
-  // Dùng trực tiếp wrong questions (đã có options + correctIndex đúng)
-  // Đặt id liên tiếp để quiz.js hoạt động
-  questions = wrongQuestions.map((q, i) => ({
-    id: q.id ?? i + 1,
-    question: q.question,
-    options: q.options,
-    correctIndex: q.correctIndex,
-  }));
+  questions = wrong.map((q, i) => ({ id: q.id ?? i + 1, question: q.question, options: q.options, correctIndex: q.correctIndex }));
   currentSheetName = "Ôn câu sai";
-
   state = createState(questions, questions.length);
-  $("settings").classList.remove("show");
-  $("sheetSelector").classList.remove("show");
   $("quizArea").style.display = "block";
-  $("status").textContent = `Đang ôn tập ${questions.length} câu sai.`;
+  $("status").textContent = `Đang ôn ${questions.length} câu sai.`;
   loadCurrentRound();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  scrollTo({ top: 0, behavior: "smooth" });
   scheduleSave();
+}
+
+// ===== Shared helper =====
+function populateSelect(sel, names, defaultName) {
+  sel.innerHTML = "";
+  names.forEach((n) => {
+    const o = document.createElement("option");
+    o.value = o.textContent = n;
+    if (n === defaultName) o.selected = true;
+    sel.appendChild(o);
+  });
 }
