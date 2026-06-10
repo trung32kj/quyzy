@@ -1,4 +1,4 @@
-/* ============================================================
+﻿/* ============================================================
    Quiz PWA — UI styles M4
    - CSS variables + dark mode (data-theme="dark")
    - Responsive (mobile-first)
@@ -1046,20 +1046,16 @@ a.ghost.btn-sm:hover {
 .quiz-main {
   flex: 1;
   min-width: 0;
-  /* Chừa chỗ cho sidebar fixed bên phải */
-  margin-right: 196px;
 }
 
-/* Sidebar fixed luôn hiện bên phải màn hình */
 .quiz-sidebar {
-  position: fixed;
-  top: calc(var(--topbar-h, 56px) + 16px);
-  right: max(16px, calc((100vw - 960px) / 2 + 4px));
-  width: 172px;
-  z-index: 15;
+  width: 176px;
+  flex-shrink: 0;
 }
 
 .sidebar-sticky {
+  position: sticky;
+  top: calc(var(--topbar-h, 56px) + 12px);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1078,7 +1074,6 @@ a.ghost.btn-sm:hover {
   border-bottom: 1px solid var(--border);
 }
 
-/* Progress trong sidebar: lưới 4 cột */
 .quiz-sidebar #progress {
   position: static;
   background: transparent;
@@ -1096,22 +1091,12 @@ a.ghost.btn-sm:hover {
   padding: 0;
 }
 
-/* Mobile: sidebar về trên, không fixed */
 @media (max-width: 700px) {
-  .quiz-main {
-    margin-right: 0;
-  }
-
-  .quiz-sidebar {
-    position: static;
-    width: 100%;
-    order: -1;
-  }
-
-  .sidebar-sticky {
-    max-height: none;
-    box-shadow: var(--shadow-sm);
-  }
+  .quiz-layout { flex-direction: column; }
+  .quiz-sidebar { width: 100%; order: -1; position: static; }
+  .sidebar-sticky { position: static; max-height: none; box-shadow: var(--shadow-sm); }
+  .quiz-sidebar #progress { grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); }
+}
 
   .quiz-sidebar #progress {
     grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
