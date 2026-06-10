@@ -137,16 +137,28 @@ function genCode() {
  */
 export async function uploadDocument(data, createdByUid) {
     let code, exists;
-    // Đảm bảo code unique
     do {
         code = genCode();
         exists = (await getDoc(doc(db, "documents", code))).exists();
     } while (exists);
 
+    // Sanitize: loại bỏ undefined/null khỏi từng câu hỏi
+    const cleanQuestions = data.questions.map((q) => {
+        const item = {
+            id: q.id ?? 0,
+            question: String(q.question ?? ""),
+            options: (q.options ?? []).map((o) => String(o ?? "")),
+            correctIndex: q.correctIndex ?? 0,
+        };
+        if (q.topic != null) item.topic = String(q.topic);
+        if (q.image != null) item.image = String(q.image);
+        return item;
+    });
+
     await setDoc(doc(db, "documents", code), {
         title: data.title || data.sheetName || "Tài liệu",
         sheetName: data.sheetName || "",
-        questions: data.questions,
+        questions: cleanQuestions,
         createdBy: createdByUid,
         createdAt: serverTimestamp(),
         usageCount: 0,
