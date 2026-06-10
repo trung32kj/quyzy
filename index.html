@@ -97,17 +97,46 @@
           <button id="discardBtn" class="ghost">Bỏ</button>
         </div>
 
-        <!-- Nhập mã tài liệu -->
+        <!-- Tải tài liệu: gộp mã + file Excel -->
         <section class="card">
-          <h3 style="margin:0 0 12px;font-size:1rem;">🔑 Nhập mã tài liệu</h3>
-          <div class="row">
-            <input type="text" id="docCodeInput" placeholder="Nhập mã 6 ký tự..." maxlength="6"
-              style="text-transform:uppercase;font-size:1.1rem;letter-spacing:3px;width:160px;" />
-            <button id="loadCodeBtn">Tải tài liệu</button>
+          <div class="row" style="flex-wrap:wrap;gap:12px;align-items:flex-end;">
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <label style="font-size:12px;color:var(--text-muted);">🔑 Mã tài liệu</label>
+              <div style="display:flex;gap:6px;">
+                <input type="text" id="docCodeInput" placeholder="6 ký tự..." maxlength="6"
+                  style="text-transform:uppercase;font-size:1rem;letter-spacing:3px;width:120px;" />
+                <button id="loadCodeBtn">Tải</button>
+              </div>
+            </div>
+            <div style="color:var(--text-muted);font-size:13px;padding-bottom:6px;">— hoặc —</div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <label for="upload" style="font-size:12px;color:var(--text-muted);">📂 File Excel</label>
+              <input type="file" id="upload" accept=".xlsx,.xls" />
+            </div>
           </div>
-          <div id="codeStatus" style="color:var(--text-muted);font-size:13px;margin-top:8px;"></div>
+
+          <div id="sheetSelector" class="row" style="display:none;">
+            <label for="sheetSelect">Sheet:</label>
+            <select id="sheetSelect"></select>
+            <button id="loadSheetBtn">Tải dữ liệu</button>
+          </div>
+
+          <div id="settings" class="row" style="display:none;">
+            <label for="numPerRound" style="font-size:13px;">Số câu/vòng:</label>
+            <select id="numPerRound">
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="15">15</option>
+              <option value="20" selected>20</option>
+              <option value="25">25</option>
+              <option value="30">30</option>
+              <option value="50">50</option>
+            </select>
+            <button id="startBtn">▶ Bắt đầu</button>
+          </div>
+
           <div id="codeSettings" class="row">
-            <label>Số câu mỗi vòng:</label>
+            <label style="font-size:13px;">Số câu/vòng:</label>
             <select id="numPerRoundCode">
               <option value="5">5</option>
               <option value="10">10</option>
@@ -118,33 +147,9 @@
             </select>
             <button id="startFromCodeBtn">▶ Bắt đầu</button>
           </div>
-        </section>
 
-        <!-- Upload Excel -->
-        <section class="card">
-          <h3 style="margin:0 0 12px;font-size:1rem;">📂 Hoặc tải file Excel</h3>
-          <div class="row">
-            <input type="file" id="upload" accept=".xlsx,.xls" />
-          </div>
-          <div id="sheetSelector" class="row">
-            <label for="sheetSelect">Sheet:</label>
-            <select id="sheetSelect"></select>
-            <button id="loadSheetBtn">Tải dữ liệu</button>
-          </div>
-          <div id="settings" class="row">
-            <label for="numPerRound">Số câu/vòng:</label>
-            <select id="numPerRound">
-              <option value="5">5</option>
-              <option value="10">10</option>
-              <option value="15">15</option>
-              <option value="20" selected>20</option>
-              <option value="25">25</option>
-              <option value="30">30</option>
-              <option value="50">50</option>
-            </select>
-            <button id="startBtn">Bắt đầu</button>
-          </div>
-          <div id="status"></div>
+          <div id="codeStatus" style="color:var(--text-muted);font-size:13px;margin-top:4px;"></div>
+          <div id="status" style="color:var(--text-muted);font-size:13px;margin-top:4px;"></div>
         </section>
 
         <div id="quizArea" style="display:none;">

@@ -366,7 +366,7 @@ $("upload").addEventListener("change", async (e) => {
     const info = readWorkbook(await file.arrayBuffer());
     workbook = info.workbook;
     populateSelect($("sheetSelect"), info.sheetNames, info.answerSheet);
-    $("sheetSelector").classList.add("show");
+    $("sheetSelector").style.display = "flex";
     $("status").textContent = `Đã đọc ${info.sheetNames.length} sheet.` +
       (info.answerSheet ? ` Gợi ý: "${info.answerSheet}".` : "");
   } catch (err) { $("status").textContent = "Lỗi: " + err.message; }
@@ -379,13 +379,13 @@ $("loadSheetBtn").addEventListener("click", () => {
     if (!questions.length) { $("status").textContent = "Không có câu hỏi hợp lệ."; return; }
     $("status").textContent = `${questions.length} câu hỏi (Schema ${result.schema})` +
       (result.skipped ? ` — bỏ ${result.skipped} dòng lỗi` : "");
-    $("settings").classList.add("show");
+    $("settings").style.display = "flex";
   } catch (err) { $("status").textContent = "Lỗi: " + err.message; }
 });
 
 $("startBtn").addEventListener("click", () => {
   state = createState(questions, parseInt($("numPerRound").value, 10));
-  $("settings").classList.remove("show");
+  $("settings").style.display = "none";
   $("quizArea").style.display = "block";
   loadCurrentRound(); scheduleSave();
 });
