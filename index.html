@@ -49,7 +49,7 @@
             </svg>
           </button>
         </div>
-        <button id="authBtn" class="ghost" style="display:none;">👤 Đăng nhập</button>
+        <button id="authBtn" class="ghost">👤 Đăng nhập</button>
         <button id="themeBtn" class="ghost icon-only" aria-label="Đổi giao diện sáng/tối" title="Đổi giao diện">
           <svg id="iconSun" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
@@ -64,21 +64,6 @@
         </button>
       </div>
     </header>
-
-    <!-- Login Modal -->
-    <div id="loginModal" class="modal" style="display:block;">
-      <div class="modal-content">
-        <h2>👤 Đăng nhập</h2>
-        <p>Nhập tên của bạn để lưu tiến độ học tập</p>
-        <div class="row">
-          <label for="usernameInput">Tên người dùng:</label>
-          <input type="text" id="usernameInput" placeholder="Nhập tên..." autocomplete="username" />
-        </div>
-        <div class="actions">
-          <button id="loginBtn">🚀 Đăng nhập</button>
-        </div>
-      </div>
-    </div>
 
     <!-- Tab Navigation -->
     <nav class="tabs">
@@ -173,7 +158,7 @@
           </select>
         </div>
 
-        <div class="row">
+        <div id="examStartBtnRow" class="row">
           <button id="examStartBtn">🚀 Bắt đầu thi</button>
         </div>
 
