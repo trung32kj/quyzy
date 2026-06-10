@@ -69,6 +69,10 @@ async function syncFromCloud() {
   } catch (e) { console.warn("sync wrong:", e); }
 }
 
+function clearExamSession() {
+  clearCurrentSession("examSession").catch(() => { });
+}
+
 // ================================================================
 //  QUIZ STATE
 // ================================================================
@@ -574,6 +578,13 @@ window.__onExamPick = function (qi, oi) {
   if (examState.submitted[examState.currentRound]) return;
   recordAnswer(examState, qi, oi);
   $(`examProg${qi}`).className = "progress-item answered";
+  // Auto-save tiến độ thi
+  saveCurrentSession({
+    type: "exam",
+    examQuestions,
+    examState,
+    savedAt: new Date().toISOString(),
+  }, "examSession").catch(() => { });
 };
 
 $("examSubmitBtn").addEventListener("click", () => submitExam(false));
@@ -615,6 +626,7 @@ function submitExam(timeUp = false) {
     `<button id="examRetryBtn" class="ghost">🔄 Thi lại</button></div>`;
   if (wrong.length) persistWrongQuestions(wrong);
   persistAttempt({ timestamp: new Date().toISOString(), sheetName: "Exam", roundIndex: examState.currentRound, correct, total, unanswered, wrongQuestions: wrong });
+  clearExamSession();
   $("examSubmitBtn").style.display = "none";
   $("examResult").scrollIntoView({ behavior: "smooth" });
   $("examRetryBtn").addEventListener("click", () => {
