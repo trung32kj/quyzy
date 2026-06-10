@@ -38,6 +38,13 @@
         Quiz PWA
       </h1>
       <div class="topbar-actions">
+        <button id="userBtn" class="ghost" style="display:none;" title="Đăng xuất">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          <span id="currentUserDisplay"></span>
+        </button>
         <button id="themeBtn" class="ghost icon-only" aria-label="Đổi giao diện sáng/tối" title="Đổi giao diện">
           <svg id="iconSun" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
@@ -52,6 +59,21 @@
         </button>
       </div>
     </header>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal" style="display:block;">
+      <div class="modal-content">
+        <h2>👤 Đăng nhập</h2>
+        <p>Nhập tên của bạn để lưu tiến độ học tập</p>
+        <div class="row">
+          <label for="usernameInput">Tên người dùng:</label>
+          <input type="text" id="usernameInput" placeholder="Nhập tên..." autocomplete="username" />
+        </div>
+        <div class="actions">
+          <button id="loginBtn">🚀 Đăng nhập</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Tab Navigation -->
     <nav class="tabs">

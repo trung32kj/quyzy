@@ -8,6 +8,7 @@ import {
   saveCurrentSession, loadCurrentSession, clearCurrentSession,
   saveAttempt, getAllAttempts, clearAttempts,
   saveWrongQuestions, getWrongQuestions, clearWrongQuestions,
+  getCurrentUser, setCurrentUser, clearCurrentUser,
 } from "./storage.js";
 
 const $ = (id) => document.getElementById(id);
@@ -105,6 +106,65 @@ window.addEventListener("scroll", () => {
   if (window.scrollY > 4) tb.classList.add("scrolled");
   else tb.classList.remove("scrolled");
 }, { passive: true });
+
+// ===== User Login/Logout =====
+async function initUserAuth() {
+  const currentUser = await getCurrentUser();
+  if (currentUser) {
+    // User already logged in
+    $("loginModal").style.display = "none";
+    $("userBtn").style.display = "flex";
+    $("currentUserDisplay").textContent = currentUser;
+  } else {
+    // Show login modal
+    $("loginModal").style.display = "flex";
+    $("userBtn").style.display = "none";
+  }
+
+  // Login button
+  $("loginBtn").addEventListener("click", async () => {
+    const username = $("usernameInput").value.trim();
+    if (!username) {
+      alert("Vui lòng nhập tên người dùng!");
+      return;
+    }
+    await setCurrentUser(username);
+    $("loginModal").style.display = "none";
+    $("userBtn").style.display = "flex";
+    $("currentUserDisplay").textContent = username;
+    // Reload data for this user
+    await initResume();
+  });
+
+  // Logout button
+  $("userBtn").addEventListener("click", async () => {
+    if (confirm("Bạn có chắc muốn đăng xuất?")) {
+      await clearCurrentUser();
+      $("loginModal").style.display = "flex";
+      $("userBtn").style.display = "none";
+      $("usernameInput").value = "";
+      // Clear current session
+      state = null;
+      questions = [];
+      workbook = null;
+      $("quizArea").style.display = "none";
+      $("status").textContent = "";
+    }
+  });
+
+  // Allow Enter key to login
+  $("usernameInput").addEventListener("keypress", (e) => {
+    if (e.key === "Enter") {
+      $("loginBtn").click();
+    }
+  });
+}
+
+if (document.readyState === "loading") {
+  window.addEventListener("DOMContentLoaded", initUserAuth);
+} else {
+  initUserAuth();
+}
 
 function resumeSession(session) {
   questions = session.questions;
