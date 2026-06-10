@@ -132,9 +132,9 @@ $("adminUploadBtn").addEventListener("click", async () => {
 });
 
 window.copyCode = function (code) {
-    navigator.clipboard.writeText(code).then(() => alert(`Đã sao chép mã: ${code}`)).catch(() => {
-        prompt("Sao chép mã này:", code);
-    });
+    navigator.clipboard.writeText(code)
+        .then(() => showToast(`📋 Đã sao chép mã: ${code}`))
+        .catch(() => prompt("Sao chép mã này:", code));
 };
 
 // ================================================================
@@ -287,4 +287,27 @@ function formatTs(ts) {
 function escapeHtml(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
         .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+// ================================================================
+//  TOAST NOTIFICATION
+// ================================================================
+function showToast(msg) {
+    let toast = document.getElementById("adminToast");
+    if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "adminToast";
+        toast.style.cssText = `
+            position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+            background:#323232; color:#fff; padding:12px 24px;
+            border-radius:8px; font-size:14px; font-weight:500;
+            box-shadow:0 4px 12px rgba(0,0,0,0.3); z-index:9999;
+            transition:opacity 0.3s; white-space:nowrap;
+        `;
+        document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.style.opacity = "1";
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => { toast.style.opacity = "0"; }, 2000);
 }
