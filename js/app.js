@@ -322,39 +322,24 @@ async function loadByCode() {
   $("codeStatus").textContent = "Đang tải...";
   $("loadCodeBtn").disabled = true;
   try {
-    const doc = await getDocumentByCode(code);
-    if (!doc) { $("codeStatus").textContent = `❌ Không tìm thấy tài liệu với mã "${code}".`; return; }
-    questions = doc.questions;
-    currentSheetName = doc.title || doc.sheetName || code;
-    $("codeStatus").textContent = `✅ Tải thành công: "${currentSheetName}" — ${questions.length} câu hỏi.`;
-    $("codeSettings").style.display = "flex";
+    const docData = await getDocumentByCode(code);
+    if (!docData) { $("codeStatus").textContent = `❌ Không tìm thấy mã "${code}".`; return; }
+    questions = docData.questions;
+    currentSheetName = docData.title || docData.sheetName || code;
+    $("codeStatus").textContent = `✅ "${currentSheetName}" — ${questions.length} câu hỏi.`;
+    // Highlight cột mã, tắt highlight cột file
+    $("colCode").classList.add("active");
+    $("colFile").classList.remove("active");
+    $("startSettings").style.display = "block";
     $("docCodeInput").value = "";
   } catch (e) {
     $("codeStatus").textContent = "Lỗi: " + e.message;
-    console.error(e);
   } finally {
     $("loadCodeBtn").disabled = false;
   }
 }
 
-$("startFromCodeBtn").addEventListener("click", () => {
-  if (!questions.length) return;
-  const num = parseInt($("numPerRoundCode").value, 10);
-  state = createState(questions, num);
-  $("codeSettings").style.display = "none";
-  $("codeStatus").textContent = "";
-
-  // Đảm bảo tab Học đang active
-  document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-  document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
-  document.querySelector('[data-tab="learn"]').classList.add("active");
-  $("tab-learn").classList.add("active");
-
-  $("quizArea").style.display = "block";
-  loadCurrentRound();
-  window.scrollTo({ top: 0, behavior: "smooth" });
-  scheduleSave();
-});
+// startFromCodeBtn đã được gộp vào startBtn chung
 
 // ================================================================
 //  TAB HỌC
@@ -366,9 +351,13 @@ $("upload").addEventListener("change", async (e) => {
     const info = readWorkbook(await file.arrayBuffer());
     workbook = info.workbook;
     populateSelect($("sheetSelect"), info.sheetNames, info.answerSheet);
-    $("sheetSelector").style.display = "flex";
+    $("sheetSelector").style.display = "block";
     $("status").textContent = `Đã đọc ${info.sheetNames.length} sheet.` +
       (info.answerSheet ? ` Gợi ý: "${info.answerSheet}".` : "");
+    // Highlight cột file, tắt highlight cột mã
+    $("colFile").classList.add("active");
+    $("colCode").classList.remove("active");
+    $("codeStatus").textContent = "";
   } catch (err) { $("status").textContent = "Lỗi: " + err.message; }
 });
 
@@ -377,17 +366,22 @@ $("loadSheetBtn").addEventListener("click", () => {
     const result = parseSheet(workbook, $("sheetSelect").value);
     questions = result.questions; currentSheetName = $("sheetSelect").value;
     if (!questions.length) { $("status").textContent = "Không có câu hỏi hợp lệ."; return; }
-    $("status").textContent = `${questions.length} câu hỏi (Schema ${result.schema})` +
+    $("status").textContent = `✅ ${questions.length} câu hỏi (Schema ${result.schema})` +
       (result.skipped ? ` — bỏ ${result.skipped} dòng lỗi` : "");
-    $("settings").style.display = "flex";
+    $("startSettings").style.display = "block";
   } catch (err) { $("status").textContent = "Lỗi: " + err.message; }
 });
 
 $("startBtn").addEventListener("click", () => {
+  if (!questions.length) return;
   state = createState(questions, parseInt($("numPerRound").value, 10));
-  $("settings").style.display = "none";
+  $("startSettings").style.display = "none";
+  $("colCode").classList.remove("active");
+  $("colFile").classList.remove("active");
   $("quizArea").style.display = "block";
-  loadCurrentRound(); scheduleSave();
+  loadCurrentRound();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  scheduleSave();
 });
 
 function loadCurrentRound() {

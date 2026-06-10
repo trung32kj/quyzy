@@ -978,3 +978,50 @@ a.ghost.btn-sm {
 a.ghost.btn-sm:hover {
   background: var(--surface-2);
 }
+
+/* ===== Load source 2 cột ===== */
+.load-source-row {
+  display: flex;
+  gap: 0;
+  align-items: stretch;
+}
+.load-source-col {
+  flex: 1;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 2px solid transparent;
+  transition: border-color var(--transition), background var(--transition);
+  min-width: 0;
+}
+.load-source-col.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.load-source-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.load-source-divider {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.load-source-divider::before,
+.load-source-divider::after {
+  content: "";
+  display: block;
+  width: 1px;
+  height: 40px;
+  background: var(--border);
+  margin: 0 8px;
+}
+@media (max-width: 500px) {
+  .load-source-row { flex-direction: column; }
+  .load-source-divider { flex-direction: row; padding: 8px 0; }
+  .load-source-divider::before,
+  .load-source-divider::after { width: 40px; height: 1px; }
+}
