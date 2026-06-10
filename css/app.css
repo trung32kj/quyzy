@@ -1046,22 +1046,26 @@ a.ghost.btn-sm:hover {
 .quiz-main {
   flex: 1;
   min-width: 0;
+  /* Chừa chỗ cho sidebar fixed bên phải */
+  margin-right: 196px;
 }
 
+/* Sidebar fixed luôn hiện bên phải màn hình */
 .quiz-sidebar {
-  width: 180px;
-  flex-shrink: 0;
+  position: fixed;
+  top: calc(var(--topbar-h, 56px) + 16px);
+  right: max(16px, calc((100vw - 960px) / 2 + 4px));
+  width: 172px;
+  z-index: 15;
 }
 
 .sidebar-sticky {
-  position: sticky;
-  top: calc(var(--topbar-h, 56px) + 12px);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: var(--space-3);
-  box-shadow: var(--shadow-sm);
-  max-height: calc(100vh - var(--topbar-h, 56px) - 24px);
+  box-shadow: var(--shadow-md);
+  max-height: calc(100vh - var(--topbar-h, 56px) - 32px);
   overflow-y: auto;
 }
 
@@ -1074,7 +1078,7 @@ a.ghost.btn-sm:hover {
   border-bottom: 1px solid var(--border);
 }
 
-/* Override progress khi trong sidebar: xếp thành lưới */
+/* Progress trong sidebar: lưới 4 cột */
 .quiz-sidebar #progress {
   position: static;
   background: transparent;
@@ -1087,27 +1091,29 @@ a.ghost.btn-sm:hover {
 .quiz-sidebar .progress-item {
   min-width: unset;
   width: 100%;
-  height: 32px;
+  height: 34px;
   font-size: 12px;
   padding: 0;
 }
 
-/* Mobile: ẩn sidebar, dùng progress dạng ngang cũ */
+/* Mobile: sidebar về trên, không fixed */
 @media (max-width: 700px) {
-  .quiz-layout {
-    flex-direction: column;
+  .quiz-main {
+    margin-right: 0;
   }
 
   .quiz-sidebar {
+    position: static;
     width: 100%;
     order: -1;
   }
 
   .sidebar-sticky {
-    position: static;
+    max-height: none;
+    box-shadow: var(--shadow-sm);
   }
 
   .quiz-sidebar #progress {
-    grid-template-columns: repeat(auto-fill, minmax(28px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
   }
 }
