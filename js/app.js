@@ -312,11 +312,18 @@ $("startFromCodeBtn").addEventListener("click", () => {
   const num = parseInt($("numPerRoundCode").value, 10);
   state = createState(questions, num);
   $("codeSettings").classList.remove("show");
+  $("codeStatus").textContent = "";
+
+  // Đảm bảo tab Học đang active
+  document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+  document.querySelectorAll(".tab-content").forEach((c) => c.classList.remove("active"));
+  document.querySelector('[data-tab="learn"]').classList.add("active");
+  $("tab-learn").classList.add("active");
+
   $("quizArea").style.display = "block";
   loadCurrentRound();
+  window.scrollTo({ top: 0, behavior: "smooth" });
   scheduleSave();
-  // Switch về tab Học
-  document.querySelector('[data-tab="learn"]').click();
 });
 
 // ================================================================
