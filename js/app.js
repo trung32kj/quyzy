@@ -87,6 +87,8 @@ let examQuestions = [];
 let examState = null;
 let examTimerInterval = null;
 let examTimeRemaining = 0;
+let examDuration = 0;
+let examStartTime = 0;
 
 // ================================================================
 //  HELPERS
@@ -213,18 +215,32 @@ async function initResume() {
         const answered = examSession.examState.answers[examSession.examState.currentRound]
           .filter((a) => a != null).length;
         const total = examSession.examState.rounds[examSession.examState.currentRound].length;
+        const elapsed = Math.floor((Date.now() - (examSession.examStartTime || Date.now())) / 1000);
+        const remaining = Math.max(0, (examSession.examDuration || 1800) - elapsed);
+        const rm = Math.floor(remaining / 60), rs = remaining % 60;
+        const timeStr = remaining > 0
+          ? `còn ${String(rm).padStart(2, "0")}:${String(rs).padStart(2, "0")}`
+          : "⏰ Đã hết giờ";
         $("resumeExamText").textContent =
-          `Phiên thi dở: đã làm ${answered}/${total} câu (lưu lúc ${formatTime(examSession.savedAt)}).`;
+          `Phiên thi dở: đã làm ${answered}/${total} câu — ${timeStr}.`;
         banner.style.display = "flex";
         $("resumeExamBtn").onclick = () => {
           examQuestions = examSession.examQuestions;
           examState = examSession.examState;
-          examTimeRemaining = examSession.examTimeRemaining || 0;
+          examStartTime = examSession.examStartTime || Date.now();
+          examDuration = examSession.examDuration || 1800;
+          // Tính thời gian còn lại thực tế
+          const elapsed = Math.floor((Date.now() - examStartTime) / 1000);
+          examTimeRemaining = Math.max(0, examDuration - elapsed);
           banner.style.display = "none";
-          // Chuyển sang tab Thi
           document.querySelector('[data-tab="exam"]').click();
           $("examArea").style.display = "block";
-          if (examTimeRemaining > 0) startExamTimer();
+          if (examTimeRemaining > 0) {
+            startExamTimer();
+          } else {
+            // Hết giờ trong lúc reload → submit luôn
+            submitExam(true);
+          }
           loadExamRound();
         };
         $("discardExamBtn").onclick = async () => {
@@ -559,7 +575,10 @@ $("examLoadCodeBtn")?.addEventListener("click", async () => {
 $("examStartBtn").addEventListener("click", () => {
   if (!examQuestions.length) { $("examStatus").textContent = "Chưa tải câu hỏi."; return; }
   examState = createState(examQuestions, parseInt($("examNumPerRound").value, 10));
-  examTimeRemaining = parseInt($("examTimer").value, 10) * 60;
+  const minutes = parseInt($("examTimer").value, 10);
+  examDuration = minutes * 60;
+  examStartTime = Date.now();
+  examTimeRemaining = examDuration;
   $("examStartSettings").style.display = "none";
   $("examColCode").classList.remove("active");
   $("examColFile").classList.remove("active");
@@ -613,7 +632,8 @@ window.__onExamPick = function (qi, oi) {
     type: "exam",
     examQuestions,
     examState,
-    examTimeRemaining,
+    examStartTime,
+    examDuration,
     savedAt: new Date().toISOString(),
   }, "examSession").catch(() => { });
 };
@@ -663,9 +683,11 @@ function submitExam(timeUp = false) {
   $("examRetryBtn").addEventListener("click", () => {
     if (examTimerInterval) clearInterval(examTimerInterval);
     examState = createState(examQuestions, examState.rounds[0].length);
-    examTimeRemaining = parseInt($("examTimer").value, 10) * 60;
+    examDuration = parseInt($("examTimer").value, 10) * 60;
+    examStartTime = Date.now();
+    examTimeRemaining = examDuration;
     $("examResult").innerHTML = ""; $("examQuiz").innerHTML = ""; $("examProgress").innerHTML = "";
-    $("examRoundInfo").textContent = ""; $("examTimerDisplay").className = "timer-display";
+    $("examRoundInfo").textContent = ""; $("examTimerDisplay").className = "timer-display-sidebar";
     $("examSubmitBtn").style.display = "";
     startExamTimer(); loadExamRound(); scrollTo({ top: 0, behavior: "smooth" });
   });
