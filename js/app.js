@@ -488,8 +488,10 @@ $("examUpload").addEventListener("change", async (e) => {
     const info = readWorkbook(await file.arrayBuffer());
     examWorkbook = info.workbook;
     populateSelect($("examSheetSelect"), info.sheetNames, info.answerSheet);
-    $("examSheetSelector").classList.add("show");
+    $("examSheetSelector").style.display = "block";
     $("examStatus").textContent = `Đã đọc ${info.sheetNames.length} sheet.`;
+    $("examColFile").classList.add("active");
+    $("examColCode").classList.remove("active");
   } catch (err) { $("examStatus").textContent = "Lỗi: " + err.message; }
 });
 
@@ -498,8 +500,8 @@ $("examLoadSheetBtn").addEventListener("click", () => {
     const result = parseSheet(examWorkbook, $("examSheetSelect").value);
     examQuestions = result.questions;
     if (!examQuestions.length) { $("examStatus").textContent = "Không có câu hỏi hợp lệ."; return; }
-    $("examStatus").textContent = `${examQuestions.length} câu hỏi.`;
-    $("examSettings").classList.add("show"); $("examTimerSettings").classList.add("show"); $("examStartBtnRow").classList.add("show");
+    $("examStatus").textContent = `✅ ${examQuestions.length} câu hỏi.`;
+    $("examStartSettings").style.display = "block";
   } catch (err) { $("examStatus").textContent = "Lỗi: " + err.message; }
 });
 
@@ -513,7 +515,9 @@ $("examLoadCodeBtn")?.addEventListener("click", async () => {
     if (!docData) { $("examStatus").textContent = `❌ Không tìm thấy mã "${code}".`; return; }
     examQuestions = docData.questions;
     $("examStatus").textContent = `✅ "${docData.title}" — ${examQuestions.length} câu.`;
-    $("examSettings").classList.add("show"); $("examTimerSettings").classList.add("show"); $("examStartBtnRow").classList.add("show");
+    $("examColCode").classList.add("active");
+    $("examColFile").classList.remove("active");
+    $("examStartSettings").style.display = "block";
     $("examCodeInput").value = "";
   } catch (e) { $("examStatus").textContent = "Lỗi: " + e.message; }
 });
@@ -522,7 +526,9 @@ $("examStartBtn").addEventListener("click", () => {
   if (!examQuestions.length) { $("examStatus").textContent = "Chưa tải câu hỏi."; return; }
   examState = createState(examQuestions, parseInt($("examNumPerRound").value, 10));
   examTimeRemaining = parseInt($("examTimer").value, 10) * 60;
-  ["examSheetSelector", "examSettings", "examTimerSettings", "examStartBtnRow"].forEach((id) => $(id).classList.remove("show"));
+  $("examStartSettings").style.display = "none";
+  $("examColCode").classList.remove("active");
+  $("examColFile").classList.remove("active");
   $("examArea").style.display = "block";
   startExamTimer(); loadExamRound();
 });

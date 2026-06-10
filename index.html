@@ -173,50 +173,59 @@
       <!-- ===== TAB THI ===== -->
       <div id="tab-exam" class="tab-content">
         <section class="card">
-          <!-- Nhập mã -->
-          <div class="row">
-            <label style="font-weight:600;">🔑 Thi từ mã tài liệu:</label>
-            <input type="text" id="examCodeInput" placeholder="Mã 6 ký tự..." maxlength="6"
-              style="text-transform:uppercase;letter-spacing:3px;width:160px;" />
-            <button id="examLoadCodeBtn">Tải</button>
+          <div class="load-source-row">
+            <!-- Cột trái: Nhập mã -->
+            <div class="load-source-col" id="examColCode">
+              <div class="load-source-label">🔑 Mã tài liệu</div>
+              <div style="display:flex;gap:6px;margin-top:8px;">
+                <input type="text" id="examCodeInput" placeholder="6 ký tự..." maxlength="6"
+                  style="text-transform:uppercase;font-size:1rem;letter-spacing:3px;flex:1;min-width:0;" />
+                <button id="examLoadCodeBtn">Tải</button>
+              </div>
+            </div>
+
+            <div class="load-source-divider">hoặc</div>
+
+            <!-- Cột phải: Upload file -->
+            <div class="load-source-col" id="examColFile">
+              <div class="load-source-label">📂 Upload file Excel</div>
+              <input type="file" id="examUpload" accept=".xlsx,.xls" style="margin-top:8px;width:100%;" />
+              <div id="examSheetSelector" style="display:none;margin-top:8px;">
+                <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                  <label style="font-size:13px;">Sheet:</label>
+                  <select id="examSheetSelect" style="flex:1;"></select>
+                  <button id="examLoadSheetBtn">Tải</button>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="row" style="align-items:center;gap:8px;">
-            <span style="color:var(--text-muted);font-size:13px;">— hoặc upload file —</span>
+
+          <!-- Cài đặt chung -->
+          <div id="examStartSettings"
+            style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <label style="font-size:13px;font-weight:600;">Số câu/vòng:</label>
+              <select id="examNumPerRound">
+                <option value="5">5</option>
+                <option value="10">10</option>
+                <option value="15">15</option>
+                <option value="20" selected>20</option>
+                <option value="25">25</option>
+                <option value="30">30</option>
+                <option value="50">50</option>
+              </select>
+              <label style="font-size:13px;font-weight:600;">Thời gian:</label>
+              <select id="examTimer">
+                <option value="15">15 phút</option>
+                <option value="30" selected>30 phút</option>
+                <option value="45">45 phút</option>
+                <option value="60">60 phút</option>
+              </select>
+              <button id="examStartBtn">🚀 Bắt đầu thi</button>
+            </div>
           </div>
-          <div class="row">
-            <label for="examUpload" style="font-weight:600;">📂 File Excel:</label>
-            <input type="file" id="examUpload" accept=".xlsx,.xls" />
-          </div>
-          <div id="examSheetSelector" class="row">
-            <label for="examSheetSelect">Sheet:</label>
-            <select id="examSheetSelect"></select>
-            <button id="examLoadSheetBtn">Tải dữ liệu</button>
-          </div>
-          <div id="examSettings" class="row">
-            <label for="examNumPerRound">Số câu/vòng:</label>
-            <select id="examNumPerRound">
-              <option value="5">5</option>
-              <option value="10">10</option>
-              <option value="15">15</option>
-              <option value="20" selected>20</option>
-              <option value="25">25</option>
-              <option value="30">30</option>
-              <option value="50">50</option>
-            </select>
-          </div>
-          <div id="examTimerSettings" class="row">
-            <label for="examTimer">Thời gian:</label>
-            <select id="examTimer">
-              <option value="15">15 phút</option>
-              <option value="30" selected>30 phút</option>
-              <option value="45">45 phút</option>
-              <option value="60">60 phút</option>
-            </select>
-          </div>
-          <div id="examStartBtnRow" class="row">
-            <button id="examStartBtn">🚀 Bắt đầu thi</button>
-          </div>
-          <div id="examStatus"></div>
+
+          <div id="examStatus" style="font-size:12px;margin-top:6px;color:var(--text-muted);"></div>
         </section>
 
         <div id="examArea" style="display:none;">
