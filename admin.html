@@ -50,6 +50,7 @@
             <!-- Tab Nav -->
             <nav class="tabs" style="margin-top:16px;">
                 <button class="tab-btn active" data-admin-tab="documents">📁 Tài liệu</button>
+                <button class="tab-btn" data-admin-tab="uploads">📥 File của user</button>
                 <button class="tab-btn" data-admin-tab="users">👥 Người dùng</button>
             </nav>
 
@@ -58,22 +59,19 @@
                 <section class="card">
                     <h2>📤 Upload tài liệu mới</h2>
                     <div class="row">
-                        <label>Tiêu đề tài liệu:</label>
-                        <input type="text" id="docTitle" placeholder="VD: Tư tưởng Hồ Chí Minh 2024"
-                            style="flex:1;min-width:200px;" />
-                    </div>
-                    <div class="row">
                         <label>File Excel:</label>
                         <input type="file" id="adminUpload" accept=".xlsx,.xls" />
                     </div>
-                    <div id="adminSheetRow" class="row" style="display:none;">
-                        <label>Sheet:</label>
-                        <select id="adminSheetSelect"></select>
-                        <button id="adminLoadSheetBtn">Xem trước</button>
+                    <!-- Chọn nhiều sheet -->
+                    <div id="adminSheetRow" style="display:none;margin-top:12px;">
+                        <p style="font-size:13px;color:var(--text-muted);margin:0 0 8px;">
+                            Chọn sheet muốn upload (có thể chọn nhiều):
+                        </p>
+                        <div id="adminSheetList" style="display:flex;flex-direction:column;gap:8px;"></div>
                     </div>
                     <div id="adminPreview" style="color:var(--text-muted);font-size:13px;margin:8px 0;"></div>
-                    <div class="row">
-                        <button id="adminUploadBtn" disabled>☁️ Upload & Tạo mã</button>
+                    <div class="row" style="margin-top:12px;">
+                        <button id="adminUploadBtn" disabled>☁️ Upload tất cả sheet đã chọn</button>
                     </div>
                     <div id="uploadResult" class="upload-result" style="display:none;"></div>
                 </section>
@@ -84,6 +82,21 @@
                         <button id="refreshDocsBtn" class="ghost">🔄 Làm mới</button>
                     </div>
                     <div id="docsList"></div>
+                </section>
+            </div>
+
+            <!-- ===== TAB FILE CỦA USER ===== -->
+            <div id="admin-tab-uploads" class="tab-content">
+                <section class="card">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                        <h2 style="margin:0;">📥 File Excel do user tải lên</h2>
+                        <button id="refreshUploadsBtn" class="ghost">🔄 Làm mới</button>
+                    </div>
+                    <p style="font-size:13px;color:var(--text-muted);margin:0 0 12px;">
+                        Danh sách file Excel mà user đã upload để học. Admin có thể chuyển thành tài liệu chính thức
+                        (tạo mã).
+                    </p>
+                    <div id="uploadsList"></div>
                 </section>
             </div>
 

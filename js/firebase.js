@@ -210,3 +210,58 @@ export async function adminDeleteDocument(code) {
 export async function adminUpdateDocumentTitle(code, title) {
     await updateDoc(doc(db, "documents", code), { title });
 }
+
+// ================================================================
+//  USER UPLOADS  (userUploads/{id})
+//  User tải file Excel → parse → lưu metadata + questions lên đây
+//  Admin xem và có thể chuyển thành tài liệu chính thức
+// ================================================================
+
+/** User lưu file đã parse lên cloud */
+export async function saveUserUpload(uid, data) {
+    const id = `${uid}_${Date.now()}`;
+    const cleanQuestions = JSON.parse(JSON.stringify(
+        data.questions.map((q) => ({
+            id: q.id ?? 0,
+            question: String(q.question ?? ""),
+            options: (q.options ?? []).map((o) => String(o ?? "")),
+            correctIndex: Number(q.correctIndex ?? 0),
+            ...(q.topic ? { topic: String(q.topic) } : {}),
+        }))
+    ));
+    await setDoc(doc(db, "userUploads", id), {
+        uid,
+        displayName: data.displayName || "",
+        email: data.email || "",
+        fileName: String(data.fileName || ""),
+        sheetName: String(data.sheetName || ""),
+        questionCount: cleanQuestions.length,
+        questions: cleanQuestions,
+        uploadedAt: serverTimestamp(),
+        status: "pending", // "pending" | "converted"
+        convertedCode: null,
+    });
+    return id;
+}
+
+/** Admin lấy tất cả user uploads */
+export async function adminGetAllUserUploads() {
+    const snap = await getDocs(collection(db, "userUploads"));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (b.uploadedAt?.seconds || 0) - (a.uploadedAt?.seconds || 0));
+}
+
+/** Admin chuyển user upload thành tài liệu chính thức */
+export async function adminConvertUpload(uploadId, title, createdByUid) {
+    const snap = await getDoc(doc(db, "userUploads", uploadId));
+    if (!snap.exists()) throw new Error("Upload không tồn tại.");
+    const data = snap.data();
+    const code = await uploadDocument({ title, sheetName: data.sheetName, questions: data.questions }, createdByUid);
+    await updateDoc(doc(db, "userUploads", uploadId), { status: "converted", convertedCode: code });
+    return code;
+}
+
+/** Admin xóa user upload */
+export async function adminDeleteUserUpload(id) {
+    await deleteDoc(doc(db, "userUploads", id));
+}

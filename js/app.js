@@ -11,7 +11,7 @@ import {
   getUserProfile, isAdmin,
   cloudSaveWrongQuestions, cloudGetWrongQuestions, cloudClearWrongQuestions,
   cloudSaveAttempt, cloudGetAttempts,
-  getDocumentByCode,
+  getDocumentByCode, saveUserUpload,
 } from "./firebase.js";
 
 const $ = (id) => document.getElementById(id);
@@ -76,6 +76,7 @@ let workbook = null;
 let questions = [];
 let state = null;
 let currentSheetName = "";
+let currentFileName = "";
 
 let examWorkbook = null;
 let examQuestions = [];
@@ -346,6 +347,7 @@ async function loadByCode() {
 // ================================================================
 $("upload").addEventListener("change", async (e) => {
   const file = e.target.files[0]; if (!file) return;
+  currentFileName = file.name;
   $("status").textContent = `Đang đọc ${file.name}...`;
   try {
     const info = readWorkbook(await file.arrayBuffer());
@@ -369,6 +371,16 @@ $("loadSheetBtn").addEventListener("click", () => {
     $("status").textContent = `✅ ${questions.length} câu hỏi (Schema ${result.schema})` +
       (result.skipped ? ` — bỏ ${result.skipped} dòng lỗi` : "");
     $("startSettings").style.display = "block";
+    // Lưu lên cloud để admin xem
+    if (currentUser) {
+      saveUserUpload(currentUser.uid, {
+        displayName: currentUser.displayName || "",
+        email: currentUser.email || "",
+        fileName: currentFileName || "",
+        sheetName: currentSheetName,
+        questions,
+      }).catch((e) => console.warn("saveUserUpload:", e));
+    }
   } catch (err) { $("status").textContent = "Lỗi: " + err.message; }
 });
 
