@@ -183,11 +183,12 @@ window.addEventListener("resize", updateTopbarHeight, { passive: true });
 // ================================================================
 async function initResume() {
   try {
+    // Resume phiên học
     const session = await loadCurrentSession();
     if (session?.state && session?.questions) {
       const r = session.state.currentRound + 1;
       $("resumeText").textContent =
-        `Phiên đang dở: "${session.sheetName}" — vòng ${r}/${session.state.rounds.length} (lưu lúc ${formatTime(session.savedAt)}).`;
+        `Phiên học dở: "${session.sheetName}" — vòng ${r}/${session.state.rounds.length} (lưu lúc ${formatTime(session.savedAt)}).`;
       $("resumeBanner").style.display = "flex";
       $("resumeBtn").onclick = () => {
         questions = session.questions; state = session.state;
@@ -202,6 +203,35 @@ async function initResume() {
       };
     } else {
       $("resumeBanner").style.display = "none";
+    }
+
+    // Resume phiên thi
+    const examSession = await loadCurrentSession("examSession");
+    if (examSession?.type === "exam" && examSession?.examState && examSession?.examQuestions) {
+      const banner = $("resumeExamBanner");
+      if (banner) {
+        const answered = examSession.examState.answers[examSession.examState.currentRound]
+          .filter((a) => a != null).length;
+        const total = examSession.examState.rounds[examSession.examState.currentRound].length;
+        $("resumeExamText").textContent =
+          `Phiên thi dở: đã làm ${answered}/${total} câu (lưu lúc ${formatTime(examSession.savedAt)}).`;
+        banner.style.display = "flex";
+        $("resumeExamBtn").onclick = () => {
+          examQuestions = examSession.examQuestions;
+          examState = examSession.examState;
+          examTimeRemaining = examSession.examTimeRemaining || 0;
+          banner.style.display = "none";
+          // Chuyển sang tab Thi
+          document.querySelector('[data-tab="exam"]').click();
+          $("examArea").style.display = "block";
+          if (examTimeRemaining > 0) startExamTimer();
+          loadExamRound();
+        };
+        $("discardExamBtn").onclick = async () => {
+          await clearCurrentSession("examSession");
+          banner.style.display = "none";
+        };
+      }
     }
   } catch (e) { console.warn("resume:", e); }
 }
@@ -578,11 +608,12 @@ window.__onExamPick = function (qi, oi) {
   if (examState.submitted[examState.currentRound]) return;
   recordAnswer(examState, qi, oi);
   $(`examProg${qi}`).className = "progress-item answered";
-  // Auto-save tiến độ thi
+  // Auto-save tiến độ thi kèm thời gian còn lại
   saveCurrentSession({
     type: "exam",
     examQuestions,
     examState,
+    examTimeRemaining,
     savedAt: new Date().toISOString(),
   }, "examSession").catch(() => { });
 };
