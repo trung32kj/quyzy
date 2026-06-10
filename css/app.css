@@ -1040,7 +1040,8 @@ a.ghost.btn-sm:hover {
 .quiz-layout {
   display: flex;
   gap: var(--space-4);
-  align-items: stretch;  /* sidebar kéo dài bằng main để sticky hoạt động */
+  align-items: stretch;
+  /* sidebar kéo dài bằng main để sticky hoạt động */
 }
 
 .quiz-main {
@@ -1094,9 +1095,34 @@ a.ghost.btn-sm:hover {
 }
 
 @media (max-width: 700px) {
-  .quiz-layout { flex-direction: column; }
-  .quiz-sidebar { width: 100%; order: -1; position: static; }
-  .sidebar-sticky { position: static; max-height: none; box-shadow: var(--shadow-sm); }
-  .quiz-sidebar #progress { grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); }
+  .quiz-layout {
+    flex-direction: column;
+  }
+
+  .quiz-sidebar {
+    width: 100%;
+    order: -1;
+    position: static;
+  }
+
+  .sidebar-sticky {
+    position: static;
+    max-height: none;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .quiz-sidebar #progress {
+    grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
+  }
 }
+}
+
+/* examProgress dùng chung style với progress trong sidebar */
+.quiz-sidebar #examProgress {
+  position: static;
+  background: transparent;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
 }

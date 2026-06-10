@@ -220,14 +220,25 @@
         </section>
 
         <div id="examArea" style="display:none;">
-          <div id="examTimerDisplay" class="timer-display"></div>
-          <div id="examRoundInfo"></div>
-          <div id="examProgress"></div>
-          <div id="examQuiz"></div>
-          <div class="actions">
-            <button id="examSubmitBtn">📤 Nộp bài</button>
+          <div class="quiz-layout">
+            <!-- Cột trái: câu hỏi -->
+            <div class="quiz-main">
+              <div id="examTimerDisplay" class="timer-display"></div>
+              <div id="examRoundInfo"></div>
+              <div id="examQuiz"></div>
+              <div class="actions">
+                <button id="examSubmitBtn">📤 Nộp bài</button>
+              </div>
+              <div id="examResult"></div>
+            </div>
+            <!-- Cột phải: tiến độ ghim -->
+            <div class="quiz-sidebar">
+              <div class="sidebar-sticky">
+                <div class="sidebar-title">📋 Tiến độ</div>
+                <div id="examProgress"></div>
+              </div>
+            </div>
           </div>
-          <div id="examResult"></div>
         </div>
       </div>
 
