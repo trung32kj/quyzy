@@ -7,86 +7,134 @@ import {
   saveAttempt, saveWrongQuestions, getWrongQuestions, clearWrongQuestions,
 } from "./storage.js";
 import {
-  auth, onAuthChange,
-  registerWithEmail, loginWithEmail, loginWithGoogle, logout,
+  onAuthChange, registerWithEmail, loginWithEmail, loginWithGoogle, logout,
+  getUserProfile, isAdmin,
   cloudSaveWrongQuestions, cloudGetWrongQuestions, cloudClearWrongQuestions,
-  cloudSaveAttempt,
+  cloudSaveAttempt, cloudGetAttempts,
+  getDocumentByCode,
 } from "./firebase.js";
 
 const $ = (id) => document.getElementById(id);
 
-// ===== Auth state =====
+// ================================================================
+//  AUTH STATE
+// ================================================================
 let currentUser = null;
+let currentUserProfile = null;
 
-onAuthChange((user) => {
+onAuthChange(async (user) => {
   currentUser = user;
   if (user) {
+    currentUserProfile = await getUserProfile(user.uid).catch(() => null);
     $("userInfo").style.display = "flex";
     $("authBtn").style.display = "none";
     $("currentUserDisplay").textContent = user.displayName || user.email.split("@")[0];
+
+    // Hiện link Admin nếu là admin
+    const adminLink = $("adminLink");
+    if (adminLink) {
+      adminLink.style.display = (currentUserProfile?.role === "admin") ? "inline-flex" : "none";
+    }
+
     closeAuthModal();
+    // Load lịch sử sau khi đăng nhập
+    await syncFromCloud();
+    // Resume phiên dở
+    initResume();
   } else {
+    currentUser = null; currentUserProfile = null;
     $("userInfo").style.display = "none";
     $("authBtn").style.display = "inline-flex";
+    const adminLink = $("adminLink");
+    if (adminLink) adminLink.style.display = "none";
+    initResume();
   }
 });
 
-// ===== Quiz state =====
+/** Sync câu sai + lịch sử từ cloud về local khi đăng nhập */
+async function syncFromCloud() {
+  if (!currentUser) return;
+  try {
+    const wrong = await cloudGetWrongQuestions(currentUser.uid);
+    if (wrong.length) await saveWrongQuestions(wrong).catch(() => { });
+  } catch (e) { console.warn("sync wrong:", e); }
+}
+
+// ================================================================
+//  QUIZ STATE
+// ================================================================
 let workbook = null;
 let questions = [];
 let state = null;
 let currentSheetName = "";
 
-// ===== Exam state =====
 let examWorkbook = null;
 let examQuestions = [];
 let examState = null;
 let examTimerInterval = null;
 let examTimeRemaining = 0;
 
-// ===== Helpers: lưu câu sai (local + cloud nếu đã login) =====
+// ================================================================
+//  HELPERS
+// ================================================================
 async function persistWrongQuestions(items) {
-  await saveWrongQuestions(items).catch((e) => console.warn("local wrong save:", e));
+  await saveWrongQuestions(items).catch((e) => console.warn("local wrong:", e));
   if (currentUser) {
-    await cloudSaveWrongQuestions(currentUser.uid, items).catch((e) => console.warn("cloud wrong save:", e));
+    await cloudSaveWrongQuestions(currentUser.uid, items).catch((e) => console.warn("cloud wrong:", e));
   }
 }
 
 async function persistAttempt(attempt) {
-  await saveAttempt(attempt).catch((e) => console.warn("local attempt save:", e));
+  await saveAttempt(attempt).catch((e) => console.warn("local attempt:", e));
   if (currentUser) {
-    await cloudSaveAttempt(currentUser.uid, attempt).catch((e) => console.warn("cloud attempt save:", e));
+    await cloudSaveAttempt(currentUser.uid, attempt).catch((e) => console.warn("cloud attempt:", e));
   }
 }
 
-// ===== Auto-save phiên học =====
 let saveTimer = null;
 function scheduleSave() {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     if (state && questions.length) {
       saveCurrentSession({ sheetName: currentSheetName, questions, state, savedAt: new Date().toISOString() })
-        .catch((e) => console.warn("session save:", e));
+        .catch(() => { });
     }
   }, 300);
 }
 
-// ===== Service Worker =====
+function formatTime(iso) {
+  try { return new Date(iso).toLocaleString("vi-VN"); } catch { return iso || "?"; }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function populateSelect(sel, names, defaultName) {
+  sel.innerHTML = "";
+  names.forEach((n) => {
+    const o = document.createElement("option");
+    o.value = o.textContent = n;
+    if (n === defaultName) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+// ================================================================
+//  SERVICE WORKER
+// ================================================================
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./sw.js")
       .then((r) => console.log("SW:", r.scope))
-      .catch((e) => console.warn("SW fail:", e));
+      .catch((e) => console.warn("SW:", e));
   });
 }
 
-// ===== Theme =====
-function applyTheme(t) {
-  document.documentElement.setAttribute("data-theme", t);
-  $("iconSun").style.display = t === "dark" ? "none" : "block";
-  $("iconMoon").style.display = t === "dark" ? "block" : "none";
-  try { localStorage.setItem("theme", t); } catch { }
-}
+// ================================================================
+//  THEME
+// ================================================================
 (function initTheme() {
   const t = document.documentElement.getAttribute("data-theme") || "light";
   applyTheme(t);
@@ -95,12 +143,20 @@ function applyTheme(t) {
   });
 })();
 
-// ===== Sticky header =====
+function applyTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  $("iconSun").style.display = t === "dark" ? "none" : "block";
+  $("iconMoon").style.display = t === "dark" ? "block" : "none";
+  try { localStorage.setItem("theme", t); } catch { }
+}
+
 window.addEventListener("scroll", () => {
   document.querySelector(".topbar")?.classList.toggle("scrolled", window.scrollY > 4);
 }, { passive: true });
 
-// ===== Resume phiên dở =====
+// ================================================================
+//  RESUME PHIÊN DỞ
+// ================================================================
 async function initResume() {
   try {
     const session = await loadCurrentSession();
@@ -120,19 +176,12 @@ async function initResume() {
         await clearCurrentSession();
         $("resumeBanner").style.display = "none";
       };
+    } else {
+      $("resumeBanner").style.display = "none";
     }
   } catch (e) { console.warn("resume:", e); }
 }
 initResume();
-
-// ===== Helpers =====
-function formatTime(iso) {
-  try { return new Date(iso).toLocaleString("vi-VN"); } catch { return iso || "?"; }
-}
-function escapeHtml(s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
 
 // ================================================================
 //  AUTH MODAL
@@ -142,73 +191,50 @@ $("closeAuthModal").addEventListener("click", closeAuthModal);
 $("authModal").addEventListener("click", (e) => { if (e.target === $("authModal")) closeAuthModal(); });
 
 function openAuthModal() { $("authModal").style.display = "flex"; }
-function closeAuthModal() { $("authModal").style.display = "none"; clearAuthErrors(); }
-function clearAuthErrors() {
+function closeAuthModal() {
+  $("authModal").style.display = "none";
   $("loginError").textContent = "";
   $("registerError").textContent = "";
 }
 
-// Tab switch trong modal
 $("tabLoginBtn").addEventListener("click", () => {
-  $("formLogin").style.display = "block";
-  $("formRegister").style.display = "none";
-  $("tabLoginBtn").classList.add("active");
-  $("tabRegisterBtn").classList.remove("active");
-  clearAuthErrors();
+  $("formLogin").style.display = "block"; $("formRegister").style.display = "none";
+  $("tabLoginBtn").classList.add("active"); $("tabRegisterBtn").classList.remove("active");
 });
 $("tabRegisterBtn").addEventListener("click", () => {
-  $("formLogin").style.display = "none";
-  $("formRegister").style.display = "block";
-  $("tabRegisterBtn").classList.add("active");
-  $("tabLoginBtn").classList.remove("active");
-  clearAuthErrors();
+  $("formLogin").style.display = "none"; $("formRegister").style.display = "block";
+  $("tabRegisterBtn").classList.add("active"); $("tabLoginBtn").classList.remove("active");
 });
 
-// Đăng nhập email
 $("loginEmailBtn").addEventListener("click", async () => {
-  const email = $("loginEmail").value.trim();
-  const pw = $("loginPassword").value;
+  const email = $("loginEmail").value.trim(), pw = $("loginPassword").value;
   if (!email || !pw) { $("loginError").textContent = "Vui lòng điền đầy đủ."; return; }
   $("loginEmailBtn").disabled = true;
-  try {
-    await loginWithEmail(email, pw);
-  } catch (e) {
-    $("loginError").textContent = friendlyAuthError(e.code);
-  } finally {
-    $("loginEmailBtn").disabled = false;
-  }
+  try { await loginWithEmail(email, pw); }
+  catch (e) { $("loginError").textContent = friendlyAuthError(e.code); }
+  finally { $("loginEmailBtn").disabled = false; }
 });
 
-// Đăng nhập Google
 $("loginGoogleBtn").addEventListener("click", async () => {
   try { await loginWithGoogle(); }
   catch (e) { $("loginError").textContent = friendlyAuthError(e.code); }
 });
 
-// Đăng ký email
 $("registerBtn").addEventListener("click", async () => {
-  const name = $("regName").value.trim();
-  const email = $("regEmail").value.trim();
-  const pw = $("regPassword").value;
+  const name = $("regName").value.trim(), email = $("regEmail").value.trim(), pw = $("regPassword").value;
   if (!name || !email || !pw) { $("registerError").textContent = "Vui lòng điền đầy đủ."; return; }
   if (pw.length < 6) { $("registerError").textContent = "Mật khẩu tối thiểu 6 ký tự."; return; }
   $("registerBtn").disabled = true;
-  try {
-    await registerWithEmail(email, pw, name);
-  } catch (e) {
-    $("registerError").textContent = friendlyAuthError(e.code);
-  } finally {
-    $("registerBtn").disabled = false;
-  }
+  try { await registerWithEmail(email, pw, name); }
+  catch (e) { $("registerError").textContent = friendlyAuthError(e.code); }
+  finally { $("registerBtn").disabled = false; }
 });
 
-// Đăng ký Google
 $("registerGoogleBtn").addEventListener("click", async () => {
   try { await loginWithGoogle(); }
   catch (e) { $("registerError").textContent = friendlyAuthError(e.code); }
 });
 
-// Enter key
 [$("loginEmail"), $("loginPassword")].forEach((el) =>
   el.addEventListener("keydown", (e) => { if (e.key === "Enter") $("loginEmailBtn").click(); })
 );
@@ -216,13 +242,18 @@ $("registerGoogleBtn").addEventListener("click", async () => {
   el.addEventListener("keydown", (e) => { if (e.key === "Enter") $("registerBtn").click(); })
 );
 
-// Đăng xuất
 $("logoutBtn").addEventListener("click", async () => {
-  if (confirm("Đăng xuất?")) await logout();
+  if (confirm("Đăng xuất?")) {
+    await logout();
+    // Xóa state quiz
+    state = null; questions = []; workbook = null;
+    $("quizArea").style.display = "none";
+    $("status").textContent = "";
+  }
 });
 
 function friendlyAuthError(code) {
-  const map = {
+  return ({
     "auth/user-not-found": "Email không tồn tại.",
     "auth/wrong-password": "Sai mật khẩu.",
     "auth/email-already-in-use": "Email đã được dùng.",
@@ -231,8 +262,7 @@ function friendlyAuthError(code) {
     "auth/popup-closed-by-user": "Đã đóng cửa sổ đăng nhập.",
     "auth/network-request-failed": "Lỗi mạng, thử lại.",
     "auth/invalid-credential": "Sai email hoặc mật khẩu.",
-  };
-  return map[code] || "Lỗi: " + code;
+  })[code] || ("Lỗi: " + code);
 }
 
 // ================================================================
@@ -246,7 +276,47 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.classList.add("active");
     $(`tab-${tabId}`).classList.add("active");
     if (tabId === "review") loadReviewData();
+    if (tabId === "history") loadHistoryData();
   });
+});
+
+// ================================================================
+//  MÃ TÀI LIỆU — nhập mã để tải câu hỏi
+// ================================================================
+$("loadCodeBtn").addEventListener("click", loadByCode);
+$("docCodeInput").addEventListener("keydown", (e) => { if (e.key === "Enter") loadByCode(); });
+
+async function loadByCode() {
+  const code = $("docCodeInput").value.trim().toUpperCase();
+  if (!code) { $("codeStatus").textContent = "Vui lòng nhập mã."; return; }
+  $("codeStatus").textContent = "Đang tải...";
+  $("loadCodeBtn").disabled = true;
+  try {
+    const doc = await getDocumentByCode(code);
+    if (!doc) { $("codeStatus").textContent = `❌ Không tìm thấy tài liệu với mã "${code}".`; return; }
+    questions = doc.questions;
+    currentSheetName = doc.title || doc.sheetName || code;
+    $("codeStatus").textContent = `✅ Tải thành công: "${currentSheetName}" — ${questions.length} câu hỏi.`;
+    $("codeSettings").classList.add("show");
+    $("docCodeInput").value = "";
+  } catch (e) {
+    $("codeStatus").textContent = "Lỗi: " + e.message;
+    console.error(e);
+  } finally {
+    $("loadCodeBtn").disabled = false;
+  }
+}
+
+$("startFromCodeBtn").addEventListener("click", () => {
+  if (!questions.length) return;
+  const num = parseInt($("numPerRoundCode").value, 10);
+  state = createState(questions, num);
+  $("codeSettings").classList.remove("show");
+  $("quizArea").style.display = "block";
+  loadCurrentRound();
+  scheduleSave();
+  // Switch về tab Học
+  document.querySelector('[data-tab="learn"]').click();
 });
 
 // ================================================================
@@ -280,8 +350,7 @@ $("startBtn").addEventListener("click", () => {
   state = createState(questions, parseInt($("numPerRound").value, 10));
   $("settings").classList.remove("show");
   $("quizArea").style.display = "block";
-  loadCurrentRound();
-  scheduleSave();
+  loadCurrentRound(); scheduleSave();
 });
 
 function loadCurrentRound() {
@@ -291,65 +360,51 @@ function loadCurrentRound() {
   const last = state.currentRound >= state.rounds.length - 1;
   $("submitBtn").style.display = "none";
   $("nextBtn").style.display = (done && !last) ? "inline-block" : "none";
-  if (done) {
-    const r = roundResult(state);
-    $("result").textContent = `🎯 Vòng ${state.currentRound + 1}: đúng ${r.correct}/${r.total}`;
-  } else {
-    $("result").textContent = "";
-  }
+  $("result").textContent = done ? `🎯 Vòng ${state.currentRound + 1}: đúng ${roundResult(state).correct}/${roundResult(state).total}` : "";
 }
 
 function renderRound() {
   const round = state.rounds[state.currentRound];
   const submitted = state.submitted[state.currentRound];
-  $("quiz").innerHTML = "";
-  $("progress").innerHTML = "";
+  $("quiz").innerHTML = ""; $("progress").innerHTML = "";
   round.forEach((item, qi) => {
     const box = document.createElement("div");
     box.className = "question"; box.id = `qbox${qi}`;
     box.innerHTML = `<h3>Câu ${qi + 1}/${round.length}: ${escapeHtml(item.question)}</h3>` +
       item.options.map((opt, oi) => {
         const checked = state.answers[state.currentRound][qi] === oi ? "checked" : "";
-        const letter = String.fromCharCode(65 + oi);
-        return `<label class="option"><input type="radio" name="q${qi}" value="${oi}" ${checked} onchange="window.__onPick(${qi},${oi})" /> ${letter}. ${escapeHtml(opt)}</label>`;
+        return `<label class="option"><input type="radio" name="q${qi}" value="${oi}" ${checked} onchange="window.__onPick(${qi},${oi})" /> ${String.fromCharCode(65 + oi)}. ${escapeHtml(opt)}</label>`;
       }).join("") + `<div class="feedback" id="fb${qi}"></div>`;
     $("quiz").appendChild(box);
-
     const dot = document.createElement("div");
     dot.className = "progress-item unanswered"; dot.id = `prog${qi}`; dot.textContent = qi + 1;
     dot.onclick = () => box.scrollIntoView({ behavior: "smooth" });
     $("progress").appendChild(dot);
-
     const ans = state.answers[state.currentRound][qi];
     if (ans != null) reflectAnswer(qi, ans, submitted);
   });
 }
 
-function reflectAnswer(qi, oi, showFeedback) {
+function reflectAnswer(qi, oi, show) {
   const item = state.rounds[state.currentRound][qi];
   const dot = $(`prog${qi}`), fb = $(`fb${qi}`), box = $(`qbox${qi}`);
-  if (showFeedback) {
+  if (show) {
     if (oi === item.correctIndex) {
-      dot.className = "progress-item correct";
-      fb.textContent = "✅ Chính xác!"; fb.className = "feedback correct";
-      box.classList.replace("incorrect", "correct") || box.classList.add("correct");
+      dot.className = "progress-item correct"; fb.textContent = "✅ Chính xác!"; fb.className = "feedback correct";
+      box.classList.remove("incorrect"); box.classList.add("correct");
     } else {
       dot.className = "progress-item incorrect";
       fb.textContent = `❌ Sai. Đáp án: ${String.fromCharCode(65 + item.correctIndex)}. ${item.options[item.correctIndex]}`;
-      fb.className = "feedback incorrect";
-      box.classList.replace("correct", "incorrect") || box.classList.add("incorrect");
+      fb.className = "feedback incorrect"; box.classList.remove("correct"); box.classList.add("incorrect");
     }
-  } else {
-    dot.className = "progress-item answered";
-  }
+  } else { dot.className = "progress-item answered"; }
 }
 
 window.__onPick = function (qi, oi) {
   recordAnswer(state, qi, oi);
   reflectAnswer(qi, oi, true);
   const round = state.rounds[state.currentRound];
-  const allDone = state.answers[state.currentRound].every((a) => a != null);
-  if (allDone && !state.submitted[state.currentRound]) {
+  if (state.answers[state.currentRound].every((a) => a != null) && !state.submitted[state.currentRound]) {
     state.submitted[state.currentRound] = true;
     const r = roundResult(state);
     $("result").textContent = `🎯 Vòng ${state.currentRound + 1}: đúng ${r.correct}/${r.total}`;
@@ -364,7 +419,7 @@ window.__onPick = function (qi, oi) {
   scheduleSave();
 };
 
-$("submitBtn").addEventListener("click", () => { /* ẩn — tab Học tự submit */ });
+$("submitBtn").addEventListener("click", () => { });
 
 $("nextBtn").addEventListener("click", () => {
   if (nextRoundFn(state)) { loadCurrentRound(); scrollTo({ top: 0, behavior: "smooth" }); scheduleSave(); }
@@ -390,20 +445,31 @@ $("examLoadSheetBtn").addEventListener("click", () => {
     const result = parseSheet(examWorkbook, $("examSheetSelect").value);
     examQuestions = result.questions;
     if (!examQuestions.length) { $("examStatus").textContent = "Không có câu hỏi hợp lệ."; return; }
-    $("examStatus").textContent = `${examQuestions.length} câu hỏi (Schema ${result.schema})`;
-    $("examSettings").classList.add("show");
-    $("examTimerSettings").classList.add("show");
-    $("examStartBtnRow").classList.add("show");
+    $("examStatus").textContent = `${examQuestions.length} câu hỏi.`;
+    $("examSettings").classList.add("show"); $("examTimerSettings").classList.add("show"); $("examStartBtnRow").classList.add("show");
   } catch (err) { $("examStatus").textContent = "Lỗi: " + err.message; }
+});
+
+// Exam từ mã tài liệu
+$("examLoadCodeBtn")?.addEventListener("click", async () => {
+  const code = $("examCodeInput").value.trim().toUpperCase();
+  if (!code) return;
+  $("examStatus").textContent = "Đang tải...";
+  try {
+    const docData = await getDocumentByCode(code);
+    if (!docData) { $("examStatus").textContent = `❌ Không tìm thấy mã "${code}".`; return; }
+    examQuestions = docData.questions;
+    $("examStatus").textContent = `✅ "${docData.title}" — ${examQuestions.length} câu.`;
+    $("examSettings").classList.add("show"); $("examTimerSettings").classList.add("show"); $("examStartBtnRow").classList.add("show");
+    $("examCodeInput").value = "";
+  } catch (e) { $("examStatus").textContent = "Lỗi: " + e.message; }
 });
 
 $("examStartBtn").addEventListener("click", () => {
   if (!examQuestions.length) { $("examStatus").textContent = "Chưa tải câu hỏi."; return; }
-  const num = parseInt($("examNumPerRound").value, 10);
-  examState = createState(examQuestions, num);
+  examState = createState(examQuestions, parseInt($("examNumPerRound").value, 10));
   examTimeRemaining = parseInt($("examTimer").value, 10) * 60;
-  ["examSheetSelector", "examSettings", "examTimerSettings", "examStartBtnRow"].forEach((id) =>
-    $(id).classList.remove("show"));
+  ["examSheetSelector", "examSettings", "examTimerSettings", "examStartBtnRow"].forEach((id) => $(id).classList.remove("show"));
   $("examArea").style.display = "block";
   startExamTimer(); loadExamRound();
 });
@@ -435,10 +501,9 @@ function renderExamRound() {
     const box = document.createElement("div");
     box.className = "question"; box.id = `examQbox${qi}`;
     box.innerHTML = `<h3>Câu ${qi + 1}/${round.length}: ${escapeHtml(item.question)}</h3>` +
-      item.options.map((opt, oi) => {
-        const letter = String.fromCharCode(65 + oi);
-        return `<label class="option"><input type="radio" name="examQ${qi}" value="${oi}" onchange="window.__onExamPick(${qi},${oi})" /> ${letter}. ${escapeHtml(opt)}</label>`;
-      }).join("") + `<div class="feedback" id="examFb${qi}"></div>`;
+      item.options.map((opt, oi) =>
+        `<label class="option"><input type="radio" name="examQ${qi}" value="${oi}" onchange="window.__onExamPick(${qi},${oi})" /> ${String.fromCharCode(65 + oi)}. ${escapeHtml(opt)}</label>`
+      ).join("") + `<div class="feedback" id="examFb${qi}"></div>`;
     $("examQuiz").appendChild(box);
     const dot = document.createElement("div");
     dot.className = "progress-item unanswered"; dot.id = `examProg${qi}`; dot.textContent = qi + 1;
@@ -460,7 +525,6 @@ function submitExam(timeUp = false) {
   examState.submitted[examState.currentRound] = true;
   const round = examState.rounds[examState.currentRound];
   document.querySelectorAll('#examQuiz input[type="radio"]').forEach((i) => i.disabled = true);
-
   let correct = 0, unanswered = 0;
   const wrong = [];
   for (let qi = 0; qi < round.length; qi++) {
@@ -468,13 +532,13 @@ function submitExam(timeUp = false) {
     if (ans == null) {
       unanswered++;
       $(`examFb${qi}`).textContent = `⚠️ Chưa trả lời. Đáp án: ${String.fromCharCode(65 + item.correctIndex)}. ${item.options[item.correctIndex]}`;
-      $(`examFb${qi}`).className = "feedback incorrect";
-      $(`examProg${qi}`).className = "progress-item unanswered";
+      $(`examFb${qi}`).className = "feedback incorrect"; $(`examProg${qi}`).className = "progress-item unanswered";
       wrong.push({ id: item.id, question: item.question, options: item.options, correctIndex: item.correctIndex, picked: null });
     } else {
-      const ok = ans === item.correctIndex;
-      if (ok) { correct++; $(`examProg${qi}`).className = "progress-item correct"; $(`examFb${qi}`).textContent = "✅ Chính xác!"; $(`examFb${qi}`).className = "feedback correct"; $(`examQbox${qi}`).classList.add("correct"); }
-      else {
+      if (ans === item.correctIndex) {
+        correct++; $(`examProg${qi}`).className = "progress-item correct";
+        $(`examFb${qi}`).textContent = "✅ Chính xác!"; $(`examFb${qi}`).className = "feedback correct"; $(`examQbox${qi}`).classList.add("correct");
+      } else {
         $(`examProg${qi}`).className = "progress-item incorrect";
         $(`examFb${qi}`).textContent = `❌ Sai. Đáp án: ${String.fromCharCode(65 + item.correctIndex)}. ${item.options[item.correctIndex]}`;
         $(`examFb${qi}`).className = "feedback incorrect"; $(`examQbox${qi}`).classList.add("incorrect");
@@ -491,7 +555,6 @@ function submitExam(timeUp = false) {
     `<p>Sai: <strong style="color:var(--danger)">${total - correct - unanswered}</strong> | Chưa làm: <strong style="color:var(--text-muted)">${unanswered}</strong></p>` +
     (wrong.length ? `<p class="hint">💾 ${wrong.length} câu sai đã lưu vào "Xem lại câu sai".</p>` : `<p class="hint">🎉 Không có câu sai!</p>`) +
     `<button id="examRetryBtn" class="ghost">🔄 Thi lại</button></div>`;
-
   if (wrong.length) persistWrongQuestions(wrong);
   persistAttempt({ timestamp: new Date().toISOString(), sheetName: "Exam", roundIndex: examState.currentRound, correct, total, unanswered, wrongQuestions: wrong });
   $("examSubmitBtn").style.display = "none";
@@ -513,21 +576,16 @@ function submitExam(timeUp = false) {
 async function loadReviewData() {
   const status = $("reviewStatus"), list = $("reviewList");
   const practiceBtn = $("reviewPracticeBtn"), clearBtn = $("reviewClearBtn");
-
-  // Ưu tiên cloud nếu đã đăng nhập
   let wrong = [];
   if (currentUser) {
     try { wrong = await cloudGetWrongQuestions(currentUser.uid); } catch { }
-    // Sync về local
     if (wrong.length) saveWrongQuestions(wrong).catch(() => { });
   } else {
     wrong = await getWrongQuestions().catch(() => []);
   }
-
   if (!wrong.length) {
     status.textContent = "Chưa có câu sai nào. Làm bài rồi quay lại!";
-    list.innerHTML = ""; practiceBtn.style.display = "none"; clearBtn.style.display = "none";
-    return;
+    list.innerHTML = ""; practiceBtn.style.display = "none"; clearBtn.style.display = "none"; return;
   }
   status.textContent = `Có ${wrong.length} câu sai:`;
   list.innerHTML = wrong.map((q, i) => {
@@ -554,18 +612,40 @@ function practiceWrong(wrong) {
   state = createState(questions, questions.length);
   $("quizArea").style.display = "block";
   $("status").textContent = `Đang ôn ${questions.length} câu sai.`;
-  loadCurrentRound();
-  scrollTo({ top: 0, behavior: "smooth" });
-  scheduleSave();
+  loadCurrentRound(); scrollTo({ top: 0, behavior: "smooth" }); scheduleSave();
 }
 
-// ===== Shared helper =====
-function populateSelect(sel, names, defaultName) {
-  sel.innerHTML = "";
-  names.forEach((n) => {
-    const o = document.createElement("option");
-    o.value = o.textContent = n;
-    if (n === defaultName) o.selected = true;
-    sel.appendChild(o);
-  });
+// ================================================================
+//  TAB LỊCH SỬ
+// ================================================================
+async function loadHistoryData() {
+  const container = $("historyList");
+  if (!container) return;
+  container.innerHTML = "<p style='color:var(--text-muted)'>Đang tải...</p>";
+
+  let attempts = [];
+  if (currentUser) {
+    try { attempts = await cloudGetAttempts(currentUser.uid); } catch { }
+  }
+  if (!attempts.length) {
+    container.innerHTML = "<p style='color:var(--text-muted)'>Chưa có lịch sử. Làm bài rồi quay lại!</p>";
+    return;
+  }
+  const sorted = [...attempts].reverse(); // mới nhất lên đầu
+  container.innerHTML = `
+    <table class="history-table">
+      <thead><tr><th>Thời gian</th><th>Tài liệu</th><th>Đúng</th><th>%</th></tr></thead>
+      <tbody>
+        ${sorted.map((a) => {
+    const pct = a.total ? Math.round(a.correct / a.total * 100) : 0;
+    const cls = pct >= 70 ? "history-good" : "history-bad";
+    return `<tr>
+            <td>${escapeHtml(formatTime(a.timestamp))}</td>
+            <td>${escapeHtml(a.sheetName || "")}</td>
+            <td class="${cls}">${a.correct}/${a.total}</td>
+            <td class="${cls}">${pct}%</td>
+          </tr>`;
+  }).join("")}
+      </tbody>
+    </table>`;
 }

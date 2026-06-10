@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin — Quiz PWA</title>
+    <meta name="theme-color" content="#1a73e8" />
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem("theme");
+                if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+                document.documentElement.setAttribute("data-theme", t);
+            } catch (e) { }
+        })();
+    </script>
+    <link rel="stylesheet" href="./css/app.css" />
+    <link rel="stylesheet" href="./css/admin.css" />
+    <script src="./vendor/xlsx.full.min.js"></script>
+    <script src="./vendor/idb-keyval.umd.js"></script>
+</head>
+
+<body>
+    <main class="container">
+        <header class="topbar">
+            <h1>⚙️ Admin Panel</h1>
+            <div class="topbar-actions">
+                <span id="adminUserDisplay" style="font-size:14px;color:var(--text-muted);"></span>
+                <a href="./index.html" class="ghost btn-sm">← Về App</a>
+                <button id="adminLogoutBtn" class="ghost icon-only" title="Đăng xuất">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Chưa đăng nhập / không phải admin -->
+        <div id="accessDenied" style="display:none;" class="card" style="text-align:center;padding:40px;">
+            <h2>🔒 Không có quyền truy cập</h2>
+            <p>Bạn cần đăng nhập với tài khoản Admin.</p>
+            <a href="./index.html" class="btn" style="margin-top:16px;">← Về trang chủ</a>
+        </div>
+
+        <div id="adminContent" style="display:none;">
+            <!-- Tab Nav -->
+            <nav class="tabs" style="margin-top:16px;">
+                <button class="tab-btn active" data-admin-tab="documents">📁 Tài liệu</button>
+                <button class="tab-btn" data-admin-tab="users">👥 Người dùng</button>
+            </nav>
+
+            <!-- ===== TAB TÀI LIỆU ===== -->
+            <div id="admin-tab-documents" class="tab-content active">
+                <section class="card">
+                    <h2>📤 Upload tài liệu mới</h2>
+                    <div class="row">
+                        <label>Tiêu đề tài liệu:</label>
+                        <input type="text" id="docTitle" placeholder="VD: Tư tưởng Hồ Chí Minh 2024"
+                            style="flex:1;min-width:200px;" />
+                    </div>
+                    <div class="row">
+                        <label>File Excel:</label>
+                        <input type="file" id="adminUpload" accept=".xlsx,.xls" />
+                    </div>
+                    <div id="adminSheetRow" class="row" style="display:none;">
+                        <label>Sheet:</label>
+                        <select id="adminSheetSelect"></select>
+                        <button id="adminLoadSheetBtn">Xem trước</button>
+                    </div>
+                    <div id="adminPreview" style="color:var(--text-muted);font-size:13px;margin:8px 0;"></div>
+                    <div class="row">
+                        <button id="adminUploadBtn" disabled>☁️ Upload & Tạo mã</button>
+                    </div>
+                    <div id="uploadResult" class="upload-result" style="display:none;"></div>
+                </section>
+
+                <section class="card">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                        <h2 style="margin:0;">📋 Danh sách tài liệu</h2>
+                        <button id="refreshDocsBtn" class="ghost">🔄 Làm mới</button>
+                    </div>
+                    <div id="docsList"></div>
+                </section>
+            </div>
+
+            <!-- ===== TAB NGƯỜI DÙNG ===== -->
+            <div id="admin-tab-users" class="tab-content">
+                <section class="card">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                        <h2 style="margin:0;">👥 Danh sách người dùng</h2>
+                        <button id="refreshUsersBtn" class="ghost">🔄 Làm mới</button>
+                    </div>
+                    <div id="usersList"></div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <script type="module" src="./js/admin.js"></script>
+</body>
+
+</html>

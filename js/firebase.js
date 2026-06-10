@@ -1,25 +1,14 @@
-// Firebase: Auth + Firestore
-// Dùng CDN module (không cần build tool)
-
+// Firebase: Auth + Firestore — Quiz PWA
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-    getAuth,
-    onAuthStateChanged,
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    signInWithPopup,
-    GoogleAuthProvider,
-    signOut,
-    updateProfile,
+    getAuth, onAuthStateChanged,
+    createUserWithEmailAndPassword, signInWithEmailAndPassword,
+    signInWithPopup, GoogleAuthProvider, signOut, updateProfile,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-    getFirestore,
-    doc,
-    getDoc,
-    setDoc,
-    updateDoc,
-    arrayUnion,
-    serverTimestamp,
+    getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
+    collection, getDocs, query, orderBy, limit,
+    serverTimestamp, Timestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -36,8 +25,9 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
-// ===== Auth =====
-
+// ================================================================
+//  AUTH
+// ================================================================
 export async function registerWithEmail(email, password, displayName) {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(cred.user, { displayName });
@@ -57,16 +47,12 @@ export async function loginWithGoogle() {
     return cred.user;
 }
 
-export async function logout() {
-    return signOut(auth);
-}
+export function logout() { return signOut(auth); }
+export function onAuthChange(cb) { return onAuthStateChanged(auth, cb); }
 
-export function onAuthChange(callback) {
-    return onAuthStateChanged(auth, callback);
-}
-
-// ===== Firestore user doc =====
-
+// ================================================================
+//  USER DOC  (users/{uid})
+// ================================================================
 async function initUserDoc(user) {
     const ref = doc(db, "users", user.uid);
     const snap = await getDoc(ref);
@@ -74,6 +60,7 @@ async function initUserDoc(user) {
         await setDoc(ref, {
             displayName: user.displayName || "",
             email: user.email || "",
+            role: "user",          // "user" | "admin"
             createdAt: serverTimestamp(),
             wrongQuestions: [],
             attempts: [],
@@ -81,13 +68,23 @@ async function initUserDoc(user) {
     }
 }
 
-// ===== Cloud: Wrong Questions =====
+export async function getUserProfile(uid) {
+    const snap = await getDoc(doc(db, "users", uid));
+    return snap.exists() ? { uid, ...snap.data() } : null;
+}
 
+export async function isAdmin(uid) {
+    const snap = await getDoc(doc(db, "users", uid));
+    return snap.exists() && snap.data().role === "admin";
+}
+
+// ================================================================
+//  WRONG QUESTIONS  (per user)
+// ================================================================
 export async function cloudSaveWrongQuestions(uid, newItems) {
     const ref = doc(db, "users", uid);
     const snap = await getDoc(ref);
     const existing = snap.exists() ? (snap.data().wrongQuestions || []) : [];
-    // Deduplicate theo question text
     const map = new Map(existing.map((q) => [q.question, q]));
     for (const item of newItems) map.set(item.question, item);
     await updateDoc(ref, { wrongQuestions: [...map.values()] });
@@ -102,17 +99,101 @@ export async function cloudClearWrongQuestions(uid) {
     await updateDoc(doc(db, "users", uid), { wrongQuestions: [] });
 }
 
-// ===== Cloud: Attempts (lịch sử) =====
-
+// ================================================================
+//  ATTEMPTS / HISTORY  (per user)
+// ================================================================
 export async function cloudSaveAttempt(uid, attempt) {
     const ref = doc(db, "users", uid);
     const snap = await getDoc(ref);
     const existing = snap.exists() ? (snap.data().attempts || []) : [];
-    const updated = [...existing, attempt].slice(-200); // giữ 200 gần nhất
+    const updated = [...existing, attempt].slice(-200);
     await updateDoc(ref, { attempts: updated });
 }
 
 export async function cloudGetAttempts(uid) {
     const snap = await getDoc(doc(db, "users", uid));
     return snap.exists() ? (snap.data().attempts || []) : [];
+}
+
+// ================================================================
+//  DOCUMENTS / TÀI LIỆU  (documents/{code})
+//  Admin upload Excel → lưu câu hỏi lên Firestore kèm mã 6 ký tự
+//  User nhập mã → tải về câu hỏi
+// ================================================================
+
+/** Sinh mã 6 ký tự in hoa ngẫu nhiên */
+function genCode() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // bỏ O,0,1,I tránh nhầm
+    let code = "";
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+}
+
+/**
+ * Admin lưu tài liệu lên Firestore.
+ * @param {{ title:string, questions:any[], sheetName:string }} data
+ * @param {string} createdByUid
+ * @returns {string} code
+ */
+export async function uploadDocument(data, createdByUid) {
+    let code, exists;
+    // Đảm bảo code unique
+    do {
+        code = genCode();
+        exists = (await getDoc(doc(db, "documents", code))).exists();
+    } while (exists);
+
+    await setDoc(doc(db, "documents", code), {
+        title: data.title || data.sheetName || "Tài liệu",
+        sheetName: data.sheetName || "",
+        questions: data.questions,
+        createdBy: createdByUid,
+        createdAt: serverTimestamp(),
+        usageCount: 0,
+    });
+    return code;
+}
+
+/**
+ * User nhập mã → lấy câu hỏi
+ * @param {string} code
+ * @returns {{ title:string, sheetName:string, questions:any[] } | null}
+ */
+export async function getDocumentByCode(code) {
+    const snap = await getDoc(doc(db, "documents", code.toUpperCase()));
+    if (!snap.exists()) return null;
+    // Tăng usage count
+    updateDoc(snap.ref, { usageCount: (snap.data().usageCount || 0) + 1 }).catch(() => { });
+    return { code, ...snap.data() };
+}
+
+// ================================================================
+//  ADMIN FUNCTIONS
+// ================================================================
+
+/** Lấy tất cả users */
+export async function adminGetAllUsers() {
+    const snap = await getDocs(collection(db, "users"));
+    return snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+}
+
+/** Đổi role user */
+export async function adminSetRole(uid, role) {
+    await updateDoc(doc(db, "users", uid), { role });
+}
+
+/** Lấy tất cả documents */
+export async function adminGetAllDocuments() {
+    const snap = await getDocs(collection(db, "documents"));
+    return snap.docs.map((d) => ({ code: d.id, ...d.data() }));
+}
+
+/** Xóa document */
+export async function adminDeleteDocument(code) {
+    await deleteDoc(doc(db, "documents", code));
+}
+
+/** Cập nhật tiêu đề document */
+export async function adminUpdateDocumentTitle(code, title) {
+    await updateDoc(doc(db, "documents", code), { title });
 }
