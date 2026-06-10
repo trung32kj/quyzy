@@ -165,12 +165,12 @@ main,
 }
 
 .tab-content {
-  display: none;
+  display: none !important;
   animation: fadeIn 200ms ease;
 }
 
 .tab-content.active {
-  display: block;
+  display: block !important;
 }
 
 /* ===== Timer Display ===== */
@@ -373,15 +373,13 @@ label {
 
 #examSheetSelector,
 #examSettings,
-#examTimerSettings,
-#examStartBtnRow {
+#examTimerSettings {
   display: none;
 }
 
 #examSheetSelector.show,
 #examSettings.show,
-#examTimerSettings.show,
-#examStartBtnRow.show {
+#examTimerSettings.show {
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
