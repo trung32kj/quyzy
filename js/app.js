@@ -297,7 +297,7 @@ async function loadByCode() {
     questions = doc.questions;
     currentSheetName = doc.title || doc.sheetName || code;
     $("codeStatus").textContent = `✅ Tải thành công: "${currentSheetName}" — ${questions.length} câu hỏi.`;
-    $("codeSettings").classList.add("show");
+    $("codeSettings").style.display = "flex";
     $("docCodeInput").value = "";
   } catch (e) {
     $("codeStatus").textContent = "Lỗi: " + e.message;
@@ -311,7 +311,7 @@ $("startFromCodeBtn").addEventListener("click", () => {
   if (!questions.length) return;
   const num = parseInt($("numPerRoundCode").value, 10);
   state = createState(questions, num);
-  $("codeSettings").classList.remove("show");
+  $("codeSettings").style.display = "none";
   $("codeStatus").textContent = "";
 
   // Đảm bảo tab Học đang active
