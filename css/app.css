@@ -1140,9 +1140,30 @@ a.ghost.btn-sm:hover {
   border: 2px solid var(--primary);
   letter-spacing: 1px;
 }
+
 .timer-display-sidebar.warning {
   color: var(--danger);
   background: var(--danger-bg);
   border-color: var(--danger);
   animation: pulse 1s infinite;
+}
+
+/* ===== Progress grid trong sidebar ===== */
+.progress-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 5px !important;
+  position: static !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+.progress-grid .progress-item {
+  min-width: unset !important;
+  width: 100% !important;
+  height: 44px !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  padding: 0 !important;
+  border-radius: 10px !important;
 }
