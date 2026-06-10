@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: kiểm tra có phải admin không
+    function isAdmin() {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // User profile
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if isAdmin();
+    }
+
+    // Tài liệu chính thức (có mã)
+    match /documents/{code} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // File do user upload (lưu để admin xem)
+    match /userUploads/{id} {
+      // User tạo mới được (upload file)
+      allow create: if request.auth != null;
+      // Chỉ admin đọc/sửa/xóa
+      allow read, update, delete: if isAdmin();
+    }
+
+  }
+}

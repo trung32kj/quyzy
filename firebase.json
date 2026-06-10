@@ -1,0 +1,18 @@
+{
+    "firestore": {
+        "rules": "firestore.rules"
+    },
+    "hosting": {
+        "public": ".",
+        "ignore": [
+            "firebase.json",
+            "firestore.rules",
+            "make_icons.py",
+            "PLAN.md",
+            "DEPLOYMENT.md",
+            "README.md",
+            ".git/**",
+            "node_modules/**"
+        ]
+    }
+}
