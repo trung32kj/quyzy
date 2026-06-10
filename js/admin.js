@@ -132,10 +132,31 @@ $("adminUploadBtn").addEventListener("click", async () => {
 });
 
 window.copyCode = function (code) {
-    navigator.clipboard.writeText(code)
-        .then(() => showToast(`📋 Đã sao chép mã: ${code}`))
-        .catch(() => prompt("Sao chép mã này:", code));
+    // Thử clipboard API trước (cần HTTPS)
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(code)
+            .then(() => showToast(`📋 Đã sao chép: ${code}`))
+            .catch(() => fallbackCopy(code));
+    } else {
+        fallbackCopy(code);
+    }
 };
+
+function fallbackCopy(code) {
+    // Fallback cho HTTP / browser cũ
+    const el = document.createElement("textarea");
+    el.value = code;
+    el.style.cssText = "position:fixed;top:-9999px;left:-9999px;";
+    document.body.appendChild(el);
+    el.focus(); el.select();
+    try {
+        document.execCommand("copy");
+        showToast(`📋 Đã sao chép: ${code}`);
+    } catch {
+        prompt("Sao chép mã này:", code);
+    }
+    document.body.removeChild(el);
+}
 
 // ================================================================
 //  DANH SÁCH TÀI LIỆU
