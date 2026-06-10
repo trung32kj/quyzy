@@ -200,6 +200,26 @@ $("loginWallBtn")?.addEventListener("click", openAuthModal);
 $("closeAuthModal").addEventListener("click", closeAuthModal);
 $("authModal").addEventListener("click", (e) => { if (e.target === $("authModal")) closeAuthModal(); });
 
+// Quên mật khẩu
+$("forgotPasswordLink").addEventListener("click", async (e) => {
+  e.preventDefault();
+  const email = $("loginEmail").value.trim();
+  if (!email) {
+    $("loginError").textContent = "Nhập email trước rồi bấm Quên mật khẩu.";
+    $("loginEmail").focus();
+    return;
+  }
+  try {
+    const { resetPasswordEmail } = await import("./firebase.js");
+    await resetPasswordEmail(email);
+    $("loginError").style.color = "var(--success)";
+    $("loginError").textContent = `✅ Đã gửi email đặt lại mật khẩu đến ${email}. Kiểm tra hộp thư!`;
+  } catch (err) {
+    $("loginError").style.color = "var(--danger)";
+    $("loginError").textContent = friendlyAuthError(err.code);
+  }
+});
+
 function openAuthModal() { $("authModal").style.display = "flex"; }
 function closeAuthModal() {
   $("authModal").style.display = "none";
