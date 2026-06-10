@@ -1040,7 +1040,7 @@ a.ghost.btn-sm:hover {
 .quiz-layout {
   display: flex;
   gap: var(--space-4);
-  align-items: flex-start;
+  align-items: stretch;  /* sidebar kéo dài bằng main để sticky hoạt động */
 }
 
 .quiz-main {
@@ -1051,6 +1051,8 @@ a.ghost.btn-sm:hover {
 .quiz-sidebar {
   width: 176px;
   flex-shrink: 0;
+  /* Sidebar cao bằng main → sticky mới có không gian scroll */
+  position: relative;
 }
 
 .sidebar-sticky {
@@ -1097,8 +1099,4 @@ a.ghost.btn-sm:hover {
   .sidebar-sticky { position: static; max-height: none; box-shadow: var(--shadow-sm); }
   .quiz-sidebar #progress { grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); }
 }
-
-  .quiz-sidebar #progress {
-    grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
-  }
 }
