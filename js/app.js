@@ -547,7 +547,6 @@ function updateTimerDisplay() {
   $("examTimerDisplay").textContent = `⏱️ ${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   $("examTimerDisplay").classList.toggle("warning", examTimeRemaining <= 300);
 }
-
 function loadExamRound() {
   $("examRoundInfo").textContent = `Vòng ${examState.currentRound + 1}/${examState.rounds.length}`;
   renderExamRound();
