@@ -11,7 +11,7 @@ import {
   getUserProfile, isAdmin,
   cloudSaveWrongQuestions, cloudGetWrongQuestions, cloudClearWrongQuestions,
   cloudSaveAttempt, cloudGetAttempts,
-  getDocumentByCode, saveUserUpload,
+  getDocumentByCode, saveUserUpload, checkRateLimit, getSystemSettings,
 } from "./firebase.js";
 
 const $ = (id) => document.getElementById(id);
@@ -26,20 +26,33 @@ onAuthChange(async (user) => {
   currentUser = user;
   if (user) {
     currentUserProfile = await getUserProfile(user.uid).catch(() => null);
+
+    // Kiểm tra maintenance mode (admin vẫn vào được)
+    if (currentUserProfile?.role !== "admin") {
+      const settings = await getSystemSettings().catch(() => ({}));
+      if (settings.maintenanceMode) {
+        await logout();
+        $("loginWall").style.display = "flex";
+        $("loginWall").innerHTML = `
+          <div style="text-align:center;padding:40px 20px;">
+            <div style="font-size:3rem;">🔧</div>
+            <h2 style="margin:12px 0;">Hệ thống đang bảo trì</h2>
+            <p style="color:var(--text-muted);">Vui lòng quay lại sau. Xin lỗi vì sự bất tiện này.</p>
+          </div>`;
+        $("appContent").style.display = "none";
+        return;
+      }
+    }
+
     $("userInfo").style.display = "flex";
     $("authBtn").style.display = "none";
     $("currentUserDisplay").textContent = user.displayName || user.email.split("@")[0];
-
-    // Hiện link Admin nếu là admin
     const adminLink = $("adminLink");
     if (adminLink) {
       adminLink.style.display = (currentUserProfile?.role === "admin") ? "inline-flex" : "none";
     }
-
-    // Hiện nội dung app, ẩn màn hình chặn
     $("loginWall").style.display = "none";
     $("appContent").style.display = "block";
-
     closeAuthModal();
     await syncFromCloud();
     initResume();
@@ -49,12 +62,8 @@ onAuthChange(async (user) => {
     $("authBtn").style.display = "inline-flex";
     const adminLink = $("adminLink");
     if (adminLink) adminLink.style.display = "none";
-
-    // Ẩn nội dung, hiện màn hình yêu cầu đăng nhập
     $("loginWall").style.display = "flex";
     $("appContent").style.display = "none";
-
-    // Reset state
     state = null; questions = []; workbook = null;
     examState = null; examQuestions = []; examWorkbook = null;
   }
@@ -353,6 +362,7 @@ function friendlyAuthError(code) {
     "auth/popup-closed-by-user": "Đã đóng cửa sổ đăng nhập.",
     "auth/network-request-failed": "Lỗi mạng, thử lại.",
     "auth/invalid-credential": "Sai email hoặc mật khẩu.",
+    "auth/user-banned": "Tài khoản của bạn đã bị chặn. Liên hệ quản trị viên.",
   })[code] || ("Lỗi: " + code);
 }
 
@@ -380,11 +390,16 @@ $("docCodeInput").addEventListener("keydown", (e) => { if (e.key === "Enter") lo
 async function loadByCode() {
   const code = $("docCodeInput").value.trim().toUpperCase();
   if (!code) { $("codeStatus").textContent = "Vui lòng nhập mã."; return; }
+  // Rate limit
+  if (!checkRateLimit(currentUser?.uid || "anon", "loadDocument")) {
+    $("codeStatus").textContent = "⚠️ Quá nhiều yêu cầu. Vui lòng chờ 1 phút."; return;
+  }
   $("codeStatus").textContent = "Đang tải...";
   $("loadCodeBtn").disabled = true;
   try {
     const docData = await getDocumentByCode(code);
     if (!docData) { $("codeStatus").textContent = `❌ Không tìm thấy mã "${code}".`; return; }
+    if (docData.disabled) { $("codeStatus").textContent = `🔒 Tài liệu "${docData.title}" hiện đang bị tắt.`; return; }
     questions = docData.questions;
     currentSheetName = docData.title || docData.sheetName || code;
     $("codeStatus").textContent = `✅ "${currentSheetName}" — ${questions.length} câu hỏi.`;
@@ -563,6 +578,7 @@ $("examLoadCodeBtn")?.addEventListener("click", async () => {
   try {
     const docData = await getDocumentByCode(code);
     if (!docData) { $("examStatus").textContent = `❌ Không tìm thấy mã "${code}".`; return; }
+    if (docData.disabled) { $("examStatus").textContent = `🔒 Tài liệu "${docData.title}" hiện đang bị tắt.`; return; }
     examQuestions = docData.questions;
     $("examStatus").textContent = `✅ "${docData.title}" — ${examQuestions.length} câu.`;
     $("examColCode").classList.add("active");

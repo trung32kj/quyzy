@@ -52,6 +52,7 @@
                 <button class="tab-btn active" data-admin-tab="documents">📁 Tài liệu</button>
                 <button class="tab-btn" data-admin-tab="uploads">📥 File của user</button>
                 <button class="tab-btn" data-admin-tab="users">👥 Người dùng</button>
+                <button class="tab-btn" data-admin-tab="system">🛡️ Hệ thống</button>
             </nav>
 
             <!-- ===== TAB TÀI LIỆU ===== -->
@@ -110,10 +111,36 @@
                     <div id="usersList"></div>
                 </section>
             </div>
-        </div>
-    </main>
+            <!-- ===== TAB HỆ THỐNG ===== -->
+            <div id="admin-tab-system" class="tab-content">
+                <section class="card">
+                    <h2>🛡️ Bảo vệ hệ thống</h2>
+                    <div class="row" style="align-items:center;gap:16px;flex-wrap:wrap;">
+                        <div>
+                            <label style="font-weight:600;">Chế độ bảo trì:</label>
+                            <p style="font-size:13px;color:var(--text-muted);margin:4px 0;">Khi bật, user không thể đăng
+                                nhập và sử dụng app.</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="maintenanceToggle" />
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="row" style="margin-top:16px;">
+                        <button id="saveSystemBtn">💾 Lưu cài đặt</button>
+                        <span id="systemSaveStatus"
+                            style="font-size:13px;color:var(--text-muted);margin-left:8px;"></span>
+                    </div>
+                </section>
+                <section class="card">
+                    <h2>📊 Thống kê</h2>
+                    <div id="systemStats" style="color:var(--text-muted)">Đang tải...</div>
+                </section>
+            </div>
 
-    <script type="module" src="./js/admin.js"></script>
+        </div><!-- end adminContent -->
+
+        <script type="module" src="./js/admin.js"></script>
 </body>
 
 </html>

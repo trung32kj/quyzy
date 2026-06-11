@@ -3,9 +3,10 @@ import { readWorkbook, parseSheet } from "./parser.js";
 import {
     auth, onAuthChange, logout, isAdmin,
     uploadDocument, resetPasswordEmail,
-    adminGetAllDocuments, adminDeleteDocument, adminUpdateDocumentTitle,
-    adminGetAllUsers, adminSetRole,
+    adminGetAllDocuments, adminDeleteDocument, adminUpdateDocumentTitle, adminToggleDocument,
+    adminGetAllUsers, adminSetRole, adminToggleBan,
     adminGetAllUserUploads, adminConvertUpload, adminDeleteUserUpload,
+    getSystemSettings, adminUpdateSystemSettings,
 } from "./firebase.js";
 
 const $ = (id) => document.getElementById(id);
@@ -52,6 +53,7 @@ document.querySelectorAll("[data-admin-tab]").forEach((btn) => {
         if (tabId === "users") loadUsers();
         if (tabId === "documents") loadDocuments();
         if (tabId === "uploads") loadUserUploads();
+        if (tabId === "system") loadSystemSettings();
     });
 });
 
@@ -170,6 +172,7 @@ async function loadDocuments() {
                         <td><code class="code-badge" onclick="copyCode('${d.code}')" title="Click để sao chép">${d.code}</code></td>
                         <td>
                             <span id="title-display-${d.code}">${escapeHtml(d.title || "")}</span>
+                            ${d.disabled ? '<span style="margin-left:6px;font-size:11px;background:var(--danger-bg);color:var(--danger);padding:2px 6px;border-radius:4px;font-weight:600;">TẮT</span>' : ''}
                             <input type="text" id="title-edit-${d.code}" value="${escapeHtml(d.title || "")}" style="display:none;width:100%;" />
                         </td>
                         <td>${(d.questions || []).length}</td>
@@ -177,6 +180,9 @@ async function loadDocuments() {
                         <td>${formatTs(d.createdAt)}</td>
                         <td class="action-btns">
                             <button class="ghost btn-sm" onclick="editDocTitle('${d.code}')">✏️</button>
+                            <button class="ghost btn-sm ${d.disabled ? '' : 'warning'}" onclick="toggleDoc('${d.code}', ${!d.disabled})" title="${d.disabled ? 'Bật tài liệu' : 'Tắt tài liệu'}">
+                                ${d.disabled ? '▶️ Bật' : '⏸️ Tắt'}
+                            </button>
                             <button class="ghost btn-sm danger" onclick="deleteDoc('${d.code}', '${escapeHtml(d.title || d.code)}')">🗑️</button>
                         </td>
                     </tr>`
@@ -223,6 +229,24 @@ window.deleteDoc = async function (code, title) {
         await adminDeleteDocument(code);
         $(`doc-row-${code}`)?.remove();
         showToast("🗑️ Đã xóa tài liệu.");
+    } catch (err) { showToast("❌ Lỗi: " + err.message); }
+};
+
+window.toggleDoc = async function (code, disabled) {
+    try {
+        await adminToggleDocument(code, disabled);
+        showToast(disabled ? `⏸️ Đã tắt tài liệu ${code}` : `▶️ Đã bật tài liệu ${code}`);
+        loadDocuments();
+    } catch (err) { showToast("❌ Lỗi: " + err.message); }
+};
+
+window.toggleBan = async function (uid, banned) {
+    const action = banned ? "chặn" : "bỏ chặn";
+    if (!confirm(`${banned ? "Chặn" : "Bỏ chặn"} người dùng này?`)) return;
+    try {
+        await adminToggleBan(uid, banned);
+        showToast(banned ? "🚫 Đã chặn người dùng." : "✅ Đã bỏ chặn người dùng.");
+        loadUsers();
     } catch (err) { showToast("❌ Lỗi: " + err.message); }
 };
 
@@ -323,7 +347,7 @@ async function loadUsers() {
                 <tbody>
                 ${users.map((u) => `
                     <tr>
-                        <td>${escapeHtml(u.displayName || "(chưa đặt)")}</td>
+                        <td>${escapeHtml(u.displayName || "(chưa đặt)")}${u.banned ? ' <span style="font-size:11px;background:var(--danger-bg);color:var(--danger);padding:2px 6px;border-radius:4px;font-weight:600;">CHẶN</span>' : ''}</td>
                         <td>${escapeHtml(u.email || "")}</td>
                         <td>
                             <select class="role-select" data-uid="${u.uid}" onchange="changeRole('${u.uid}', this.value)">
@@ -336,6 +360,9 @@ async function loadUsers() {
                         <td>${(u.attempts || []).length}</td>
                         <td class="action-btns">
                             <button class="ghost btn-sm" onclick="sendReset('${escapeHtml(u.email)}')">📧 Reset MK</button>
+                            <button class="ghost btn-sm ${u.banned ? '' : 'danger'}" onclick="toggleBan('${u.uid}', ${!u.banned})">
+                                ${u.banned ? '✅ Bỏ chặn' : '🚫 Chặn'}
+                            </button>
                             <button class="ghost btn-sm danger" onclick="clearUserData('${u.uid}', '${escapeHtml(u.displayName || u.email)}')">🗑️ Xóa data</button>
                         </td>
                     </tr>`
@@ -389,6 +416,53 @@ function fallbackCopy(code) {
     catch { prompt("Sao chép mã này:", code); }
     document.body.removeChild(el);
 }
+
+// ================================================================
+//  TAB HỆ THỐNG
+// ================================================================
+async function loadSystemSettings() {
+    try {
+        const settings = await getSystemSettings();
+        $("maintenanceToggle").checked = !!settings.maintenanceMode;
+
+        // Thống kê
+        const [users, docs] = await Promise.all([
+            adminGetAllUsers().catch(() => []),
+            adminGetAllDocuments().catch(() => []),
+        ]);
+        const banned = users.filter((u) => u.banned).length;
+        const disabledDocs = docs.filter((d) => d.disabled).length;
+        const totalAttempts = users.reduce((s, u) => s + (u.attempts?.length || 0), 0);
+        $("systemStats").innerHTML = `
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-top:8px;">
+                ${statCard("👥 Tổng user", users.length)}
+                ${statCard("🚫 Đang chặn", banned, banned > 0 ? "var(--danger)" : "")}
+                ${statCard("📁 Tài liệu", docs.length)}
+                ${statCard("⏸️ Đang tắt", disabledDocs, disabledDocs > 0 ? "var(--warning)" : "")}
+                ${statCard("📝 Tổng bài làm", totalAttempts)}
+            </div>`;
+    } catch (err) {
+        $("systemStats").textContent = "Lỗi: " + err.message;
+    }
+}
+
+function statCard(label, value, color = "") {
+    return `<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;text-align:center;">
+        <div style="font-size:1.5rem;font-weight:700;color:${color || "var(--primary)"};">${value}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${label}</div>
+    </div>`;
+}
+
+$("saveSystemBtn")?.addEventListener("click", async () => {
+    const maintenance = $("maintenanceToggle").checked;
+    try {
+        await adminUpdateSystemSettings({ maintenanceMode: maintenance });
+        $("systemSaveStatus").textContent = "✅ Đã lưu!";
+        setTimeout(() => { $("systemSaveStatus").textContent = ""; }, 2000);
+    } catch (err) {
+        $("systemSaveStatus").textContent = "❌ " + err.message;
+    }
+});
 
 // ================================================================
 //  HELPERS

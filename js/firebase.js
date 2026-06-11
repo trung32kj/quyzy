@@ -38,14 +38,24 @@ export async function registerWithEmail(email, password, displayName) {
 
 export async function loginWithEmail(email, password) {
     const cred = await signInWithEmailAndPassword(auth, email, password);
+    await checkBanned(cred.user);
     await initUserDoc(cred.user);
     return cred.user;
 }
 
 export async function loginWithGoogle() {
     const cred = await signInWithPopup(auth, googleProvider);
+    await checkBanned(cred.user);
     await initUserDoc(cred.user);
     return cred.user;
+}
+
+async function checkBanned(user) {
+    const snap = await getDoc(doc(db, "users", user.uid));
+    if (snap.exists() && snap.data().banned) {
+        await signOut(auth);
+        throw { code: "auth/user-banned", message: "Tài khoản của bạn đã bị chặn." };
+    }
 }
 
 export function logout() { return signOut(auth); }
@@ -175,9 +185,10 @@ export async function uploadDocument(data, createdByUid) {
 export async function getDocumentByCode(code) {
     const snap = await getDoc(doc(db, "documents", code.toUpperCase()));
     if (!snap.exists()) return null;
-    // Tăng usage count
-    updateDoc(snap.ref, { usageCount: (snap.data().usageCount || 0) + 1 }).catch(() => { });
-    return { code, ...snap.data() };
+    const data = snap.data();
+    if (data.disabled) return { disabled: true, title: data.title };
+    updateDoc(snap.ref, { usageCount: (data.usageCount || 0) + 1 }).catch(() => { });
+    return { code, ...data };
 }
 
 // ================================================================
@@ -193,6 +204,16 @@ export async function adminGetAllUsers() {
 /** Đổi role user */
 export async function adminSetRole(uid, role) {
     await updateDoc(doc(db, "users", uid), { role });
+}
+
+/** Chặn/bỏ chặn user */
+export async function adminToggleBan(uid, banned) {
+    await updateDoc(doc(db, "users", uid), { banned });
+}
+
+/** Tắt/bật tài liệu */
+export async function adminToggleDocument(code, disabled) {
+    await updateDoc(doc(db, "documents", code), { disabled });
 }
 
 /** Lấy tất cả documents */
@@ -264,4 +285,52 @@ export async function adminConvertUpload(uploadId, title, createdByUid) {
 /** Admin xóa user upload */
 export async function adminDeleteUserUpload(id) {
     await deleteDoc(doc(db, "userUploads", id));
+}
+
+// ================================================================
+//  RATE LIMITING — chống spam/tấn công
+//  Lưu số lần request vào Firestore theo uid + window 1 phút
+// ================================================================
+const RATE_LIMITS = {
+    loadDocument: { max: 20, windowMs: 60000 },  // 20 lần/phút
+    submitAttempt: { max: 30, windowMs: 60000 },  // 30 lần/phút
+};
+
+const _rateLimitCache = new Map(); // uid_action -> { count, resetAt }
+
+/**
+ * Kiểm tra rate limit phía client (không thay thế server-side)
+ * @returns {boolean} true = OK, false = bị chặn
+ */
+export function checkRateLimit(uid, action) {
+    if (!uid) return true;
+    const key = `${uid}_${action}`;
+    const limit = RATE_LIMITS[action];
+    if (!limit) return true;
+
+    const now = Date.now();
+    const entry = _rateLimitCache.get(key);
+
+    if (!entry || now > entry.resetAt) {
+        _rateLimitCache.set(key, { count: 1, resetAt: now + limit.windowMs });
+        return true;
+    }
+
+    if (entry.count >= limit.max) {
+        return false; // bị chặn
+    }
+
+    entry.count++;
+    return true;
+}
+
+/** Admin lấy settings hệ thống (maintenance mode, etc.) */
+export async function getSystemSettings() {
+    const snap = await getDoc(doc(db, "system", "settings"));
+    return snap.exists() ? snap.data() : { maintenanceMode: false, maxUsersPerDay: 1000 };
+}
+
+/** Admin cập nhật settings hệ thống */
+export async function adminUpdateSystemSettings(settings) {
+    await setDoc(doc(db, "system", "settings"), settings, { merge: true });
 }
