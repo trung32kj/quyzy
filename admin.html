@@ -60,6 +60,10 @@
                 <section class="card">
                     <h2>📤 Upload tài liệu mới</h2>
                     <div class="row">
+                        <label>Môn học:</label>
+                        <input type="text" id="adminSubject" placeholder="Ví dụ: Toán, Lý, Hóa, Văn, Anh..." />
+                    </div>
+                    <div class="row">
                         <label>File Excel:</label>
                         <input type="file" id="adminUpload" accept=".xlsx,.xls" />
                     </div>
@@ -73,6 +77,7 @@
                     <div id="adminPreview" style="color:var(--text-muted);font-size:13px;margin:8px 0;"></div>
                     <div class="row" style="margin-top:12px;">
                         <button id="adminUploadBtn" disabled>☁️ Upload tất cả sheet đã chọn</button>
+                        <button id="adminCancelBtn" class="ghost" style="display:none;">❌ Hủy</button>
                     </div>
                     <div id="uploadResult" class="upload-result" style="display:none;"></div>
                 </section>

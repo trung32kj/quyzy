@@ -102,6 +102,7 @@ $("adminUpload").addEventListener("change", async (e) => {
         $("adminSheetRow").style.display = "block";
         $("adminPreview").textContent = `File: ${file.name} — ${info.sheetNames.length} sheet. Chọn sheet muốn upload:`;
         $("adminUploadBtn").disabled = false;
+        $("adminCancelBtn").style.display = "inline-block";
     } catch (err) {
         $("adminPreview").textContent = "Lỗi: " + err.message;
     }
@@ -119,6 +120,8 @@ $("adminUploadBtn").addEventListener("click", async () => {
         const sheetName = cb.getAttribute("data-sheet");
         const titleInput = document.querySelector(`.sheet-title-input[data-sheet="${sheetName}"]`);
         const title = titleInput?.value.trim() || sheetName;
+        const subjectInput = $("adminSubject");
+        const subject = subjectInput?.value.trim() || "";
         const data = sheetData.get(sheetName);
         if (!data || !data.questions.length) {
             results.push({ sheetName, error: "Không có câu hỏi hợp lệ." });
@@ -126,7 +129,7 @@ $("adminUploadBtn").addEventListener("click", async () => {
         }
         try {
             const code = await uploadDocument(
-                { title, sheetName, questions: data.questions },
+                { title, sheetName, questions: data.questions, subject },
                 currentAdminUser.uid
             );
             results.push({ sheetName, title, code, count: data.questions.length });
@@ -151,6 +154,17 @@ $("adminUploadBtn").addEventListener("click", async () => {
     loadDocuments();
 });
 
+$("adminCancelBtn").addEventListener("click", () => {
+    $("adminUpload").value = "";
+    $("adminSheetRow").style.display = "none";
+    $("adminSheetList").innerHTML = "";
+    $("adminPreview").textContent = "";
+    $("adminUploadBtn").disabled = true;
+    $("adminCancelBtn").style.display = "none";
+    sheetData.clear();
+    adminWorkbook = null;
+});
+
 // ================================================================
 //  DANH SÁCH TÀI LIỆU
 // ================================================================
@@ -163,33 +177,72 @@ async function loadDocuments() {
         const docs = await adminGetAllDocuments();
         if (!docs.length) { container.innerHTML = "<p style='color:var(--text-muted)'>Chưa có tài liệu nào.</p>"; return; }
         docs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+
+        // Group by subject
+        const grouped = new Map();
+        docs.forEach(d => {
+            const subject = d.subject || "Chung";
+            if (!grouped.has(subject)) grouped.set(subject, []);
+            grouped.get(subject).push(d);
+        });
+
+        // Get all subjects for filter
+        const subjects = Array.from(grouped.keys()).sort();
+
+        // Build filter dropdown and grouped tables
         container.innerHTML = `
-            <table class="admin-table">
-                <thead><tr><th>Mã</th><th>Tiêu đề</th><th>Câu hỏi</th><th>Lượt dùng</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead>
-                <tbody>
-                ${docs.map((d) => `
-                    <tr id="doc-row-${d.code}">
-                        <td><code class="code-badge" onclick="copyCode('${d.code}')" title="Click để sao chép">${d.code}</code></td>
-                        <td>
-                            <span id="title-display-${d.code}">${escapeHtml(d.title || "")}</span>
-                            ${d.disabled ? '<span style="margin-left:6px;font-size:11px;background:var(--danger-bg);color:var(--danger);padding:2px 6px;border-radius:4px;font-weight:600;">TẮT</span>' : ''}
-                            <input type="text" id="title-edit-${d.code}" value="${escapeHtml(d.title || "")}" style="display:none;width:100%;" />
-                        </td>
-                        <td>${(d.questions || []).length}</td>
-                        <td>${d.usageCount || 0}</td>
-                        <td>${formatTs(d.createdAt)}</td>
-                        <td class="action-btns">
-                            <button class="ghost btn-sm" onclick="editDocTitle('${d.code}')">✏️</button>
-                            <button class="ghost btn-sm ${d.disabled ? '' : 'warning'}" onclick="toggleDoc('${d.code}', ${!d.disabled})" title="${d.disabled ? 'Bật tài liệu' : 'Tắt tài liệu'}">
-                                ${d.disabled ? '▶️ Bật' : '⏸️ Tắt'}
-                            </button>
-                            <button class="ghost btn-sm danger" onclick="deleteDoc('${d.code}', '${escapeHtml(d.title || d.code)}')">🗑️</button>
-                        </td>
-                    </tr>`
-        ).join("")}
-                </tbody>
-            </table>
+            <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                <label style="font-weight:600;">Lọc theo môn:</label>
+                <select id="subjectFilter" style="padding:6px 12px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+                    <option value="all">Tất cả</option>
+                    ${subjects.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("")}
+                </select>
+            </div>
+            <div id="docsTables">
+                ${Array.from(grouped.entries()).map(([subject, docsList]) => `
+                    <div class="subject-group" data-subject="${escapeHtml(subject)}">
+                        <h3 style="margin:16px 0 8px 0;color:var(--primary);font-size:16px;">📚 ${escapeHtml(subject)}</h3>
+                        <table class="admin-table">
+                            <thead><tr><th>Mã</th><th>Tiêu đề</th><th>Câu hỏi</th><th>Lượt dùng</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead>
+                            <tbody>
+                            ${docsList.map((d) => `
+                                <tr id="doc-row-${d.code}">
+                                    <td><code class="code-badge" onclick="copyCode('${d.code}')" title="Click để sao chép">${d.code}</code></td>
+                                    <td>
+                                        <span id="title-display-${d.code}">${escapeHtml(d.title || "")}</span>
+                                        ${d.disabled ? '<span style="margin-left:6px;font-size:11px;background:var(--danger-bg);color:var(--danger);padding:2px 6px;border-radius:4px;font-weight:600;">TẮT</span>' : ''}
+                                        <input type="text" id="title-edit-${d.code}" value="${escapeHtml(d.title || "")}" style="display:none;width:100%;" />
+                                    </td>
+                                    <td>${(d.questions || []).length}</td>
+                                    <td>${d.usageCount || 0}</td>
+                                    <td>${formatTs(d.createdAt)}</td>
+                                    <td class="action-btns">
+                                        <button class="ghost btn-sm" onclick="editDocTitle('${d.code}')">✏️</button>
+                                        <button class="ghost btn-sm ${d.disabled ? '' : 'warning'}" onclick="toggleDoc('${d.code}', ${!d.disabled})" title="${d.disabled ? 'Bật tài liệu' : 'Tắt tài liệu'}">
+                                            ${d.disabled ? '▶️ Bật' : '⏸️ Tắt'}
+                                        </button>
+                                        <button class="ghost btn-sm danger" onclick="deleteDoc('${d.code}', '${escapeHtml(d.title || d.code)}')">🗑️</button>
+                                    </td>
+                                </tr>`
+                            ).join("")}
+                            </tbody>
+                        </table>
+                    </div>`
+                ).join("")}
+            </div>
             <p style="color:var(--text-muted);font-size:13px;margin-top:8px;">Tổng: ${docs.length} tài liệu</p>`;
+
+        // Add filter functionality
+        $("subjectFilter").addEventListener("change", (e) => {
+            const selected = e.target.value;
+            document.querySelectorAll(".subject-group").forEach(group => {
+                if (selected === "all" || group.dataset.subject === selected) {
+                    group.style.display = "block";
+                } else {
+                    group.style.display = "none";
+                }
+            });
+        });
     } catch (err) {
         container.innerHTML = `<p style="color:var(--danger)">Lỗi: ${err.message}</p>`;
     }
@@ -290,6 +343,9 @@ async function loadUserUploads() {
                         <td class="action-btns">
                             ${u.status !== "converted" ? `
                             <div style="display:flex;flex-direction:column;gap:4px;">
+                                <input type="text" id="convert-subject-${u.id}"
+                                    placeholder="Môn học..."
+                                    style="font-size:12px;padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);width:180px;" />
                                 <input type="text" id="convert-title-${u.id}"
                                     placeholder="Tiêu đề tài liệu..."
                                     value="${escapeHtml(u.sheetName || u.fileName || "")}"
@@ -310,10 +366,12 @@ async function loadUserUploads() {
 
 window.convertUpload = async function (uploadId) {
     const titleInput = $(`convert-title-${uploadId}`);
+    const subjectInput = $(`convert-subject-${uploadId}`);
     const title = titleInput?.value.trim();
+    const subject = subjectInput?.value.trim() || "";
     if (!title) { showToast("Nhập tiêu đề trước."); titleInput?.focus(); return; }
     try {
-        const code = await adminConvertUpload(uploadId, title, currentAdminUser.uid);
+        const code = await adminConvertUpload(uploadId, title, subject, currentAdminUser.uid);
         showToast(`✅ Đã tạo tài liệu chính thức! Mã: ${code}`);
         loadUserUploads();
         loadDocuments();
