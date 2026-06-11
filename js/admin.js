@@ -3,7 +3,7 @@ import { readWorkbook, parseSheet } from "./parser.js";
 import {
     auth, onAuthChange, logout, isAdmin,
     uploadDocument, resetPasswordEmail,
-    adminGetAllDocuments, adminDeleteDocument, adminUpdateDocumentTitle, adminToggleDocument,
+    adminGetAllDocuments, adminDeleteDocument, adminUpdateDocumentTitle, adminUpdateDocumentSubject, adminToggleDocument,
     adminGetAllUsers, adminSetRole, adminToggleBan,
     adminGetAllUserUploads, adminConvertUpload, adminDeleteUserUpload,
     getSystemSettings, adminUpdateSystemSettings,
@@ -116,12 +116,13 @@ $("adminUploadBtn").addEventListener("click", async () => {
     $("adminUploadBtn").textContent = "Đang upload...";
     const results = [];
 
+    const subjectInput = $("adminSubject");
+    const subject = subjectInput?.value.trim() || "";
+
     for (const cb of checked) {
         const sheetName = cb.getAttribute("data-sheet");
         const titleInput = document.querySelector(`.sheet-title-input[data-sheet="${sheetName}"]`);
         const title = titleInput?.value.trim() || sheetName;
-        const subjectInput = $("adminSubject");
-        const subject = subjectInput?.value.trim() || "";
         const data = sheetData.get(sheetName);
         if (!data || !data.questions.length) {
             results.push({ sheetName, error: "Không có câu hỏi hợp lệ." });
@@ -203,11 +204,15 @@ async function loadDocuments() {
                     <div class="subject-group" data-subject="${escapeHtml(subject)}">
                         <h3 style="margin:16px 0 8px 0;color:var(--primary);font-size:16px;">📚 ${escapeHtml(subject)}</h3>
                         <table class="admin-table">
-                            <thead><tr><th>Mã</th><th>Tiêu đề</th><th>Câu hỏi</th><th>Lượt dùng</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead>
+                            <thead><tr><th>Mã</th><th>Môn học</th><th>Tiêu đề</th><th>Câu hỏi</th><th>Lượt dùng</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead>
                             <tbody>
                             ${docsList.map((d) => `
                                 <tr id="doc-row-${d.code}">
                                     <td><code class="code-badge" onclick="copyCode('${d.code}')" title="Click để sao chép">${d.code}</code></td>
+                                    <td>
+                                        <span id="subject-display-${d.code}">${escapeHtml(d.subject || "Chung")}</span>
+                                        <input type="text" id="subject-edit-${d.code}" value="${escapeHtml(d.subject || "")}" style="display:none;width:100%;" />
+                                    </td>
                                     <td>
                                         <span id="title-display-${d.code}">${escapeHtml(d.title || "")}</span>
                                         ${d.disabled ? '<span style="margin-left:6px;font-size:11px;background:var(--danger-bg);color:var(--danger);padding:2px 6px;border-radius:4px;font-weight:600;">TẮT</span>' : ''}
@@ -217,6 +222,7 @@ async function loadDocuments() {
                                     <td>${d.usageCount || 0}</td>
                                     <td>${formatTs(d.createdAt)}</td>
                                     <td class="action-btns">
+                                        <button class="ghost btn-sm" onclick="editDocSubject('${d.code}')">📚</button>
                                         <button class="ghost btn-sm" onclick="editDocTitle('${d.code}')">✏️</button>
                                         <button class="ghost btn-sm ${d.disabled ? '' : 'warning'}" onclick="toggleDoc('${d.code}', ${!d.disabled})" title="${d.disabled ? 'Bật tài liệu' : 'Tắt tài liệu'}">
                                             ${d.disabled ? '▶️ Bật' : '⏸️ Tắt'}
@@ -246,6 +252,35 @@ async function loadDocuments() {
     } catch (err) {
         container.innerHTML = `<p style="color:var(--danger)">Lỗi: ${err.message}</p>`;
     }
+}
+
+window.editDocSubject = function (code) {
+    const display = $(`subject-display-${code}`);
+    const input = $(`subject-edit-${code}`);
+    if (input.style.display === "none") {
+        display.style.display = "none"; input.style.display = "inline-block"; input.focus();
+        let saveBtn = $(`save-subject-btn-${code}`);
+        if (!saveBtn) {
+            saveBtn = document.createElement("button");
+            saveBtn.className = "btn-sm"; saveBtn.textContent = "💾 Lưu"; saveBtn.id = `save-subject-btn-${code}`;
+            saveBtn.onclick = () => saveDocSubject(code, input.value.trim());
+            input.after(saveBtn);
+        }
+        input.onkeydown = async (e) => {
+            if (e.key === "Enter") await saveDocSubject(code, input.value.trim());
+            if (e.key === "Escape") { display.style.display = ""; input.style.display = "none"; saveBtn.remove(); }
+        };
+    }
+};
+
+async function saveDocSubject(code, subject) {
+    if (!subject) subject = "Chung";
+    await adminUpdateDocumentSubject(code, subject);
+    $(`subject-display-${code}`).textContent = subject;
+    $(`subject-display-${code}`).style.display = "";
+    $(`subject-edit-${code}`).style.display = "none";
+    $(`save-subject-btn-${code}`)?.remove();
+    loadDocuments(); // Reload to regroup by subject
 }
 
 window.editDocTitle = function (code) {

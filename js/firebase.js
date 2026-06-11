@@ -169,6 +169,7 @@ export async function uploadDocument(data, createdByUid) {
     await setDoc(doc(db, "documents", code), {
         title: String(data.title || data.sheetName || "Tài liệu"),
         sheetName: String(data.sheetName || ""),
+        subject: String(data.subject || ""),
         questions: cleanQuestions,
         createdBy: String(createdByUid),
         createdAt: serverTimestamp(),
@@ -232,6 +233,11 @@ export async function adminUpdateDocumentTitle(code, title) {
     await updateDoc(doc(db, "documents", code), { title });
 }
 
+/** Cập nhật môn học document */
+export async function adminUpdateDocumentSubject(code, subject) {
+    await updateDoc(doc(db, "documents", code), { subject });
+}
+
 // ================================================================
 //  USER UPLOADS  (userUploads/{id})
 //  User tải file Excel → parse → lưu metadata + questions lên đây
@@ -273,11 +279,11 @@ export async function adminGetAllUserUploads() {
 }
 
 /** Admin chuyển user upload thành tài liệu chính thức */
-export async function adminConvertUpload(uploadId, title, createdByUid) {
+export async function adminConvertUpload(uploadId, title, subject, createdByUid) {
     const snap = await getDoc(doc(db, "userUploads", uploadId));
     if (!snap.exists()) throw new Error("Upload không tồn tại.");
     const data = snap.data();
-    const code = await uploadDocument({ title, sheetName: data.sheetName, questions: data.questions }, createdByUid);
+    const code = await uploadDocument({ title, sheetName: data.sheetName, questions: data.questions, subject }, createdByUid);
     await updateDoc(doc(db, "userUploads", uploadId), { status: "converted", convertedCode: code });
     return code;
 }
